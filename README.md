@@ -99,6 +99,11 @@ This repo is configured for zero-issue deployment on Vercel via `vercel.json`, `
 
 Deploy with `vercel` or import the repository in the Vercel dashboard (no extra environment variables or build overrides required).
 
+A Vercel deployment is served over HTTPS with a trusted certificate, so a Meta Quest 3
+can open it directly in Quest Browser and enter VR. No `start:https` server or
+certificate warning is needed. The lobby, the ride and all seven games run from the
+one page, and same-page navigation keeps the headset in VR on Vercel too.
+
 ## Layout
 
 ```
