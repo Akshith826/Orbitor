@@ -35,6 +35,7 @@ beforeAll(async () => {
         location, GyroLook: class {}, ScreenAwake: class {}, DwellSelector,
         setPhoneUILayer, PHONE_UI_LAYER, VR_GAMES, VR_ARCADE_META, InterceptGame, Quest3Rig,
         questOnlyVRStatus, readThumbstick, readQuestControllers, pulseQuestController, setRayFromObject, guardXRFrames,
+        XR_SESSION_INIT: { optionalFeatures: ['hand-tracking'] }, setupAutoVR: () => Promise.resolve({ supported: false }), navigateInVR: () => {},
         localStorage: { getItem: k => localStore.get(k) || null, setItem: (k, v) => localStore.set(k, v) },
         navigator: navigatorStub, queueMicrotask });
 });
@@ -246,9 +247,9 @@ describe('Dodge mode wiring', () => {
         expect(app.dodge.run.state).toBe('paused');
     });
     it.each([
-        ['explore', ['explore', 'scan-hunt', 'next-world', 'toggle-cockpit']],
-        ['ride', ['ride', 'explore']],
-        ['dodge', ['dodge']]
+        ['explore', ['explore', 'scan-hunt', 'next-world', 'toggle-cockpit', 'lobby']],
+        ['ride', ['ride', 'explore', 'lobby']],
+        ['dodge', ['dodge', 'lobby']]
     ])('offers the matching headset controls for the %s entry', (entry, actions) => {
         const app = host(); app.entry = entry; app.buildVRMenu();
         expect(app.vrMenuItems.map(item => item.userData.action)).toEqual(actions);

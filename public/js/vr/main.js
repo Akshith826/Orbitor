@@ -34,6 +34,7 @@ import { VR_GAMES, VR_ARCADE_META } from './arcade-run.js?v=20261125-q3';
 import { Quest3Rig } from './quest3-rig.js?v=20261125-q3';
 import { immersiveVRStatus, questOnlyVRStatus, readThumbstick, readQuestControllers, pulseQuestController, setRayFromObject } from './xr-support.js?v=20261125-xr1';
 import { guardXRFrames } from './xr-frame-guard.js?v=20261125-xr1';
+import { setupAutoVR, navigateInVR, XR_SESSION_INIT } from './auto-vr.js?v=20261126-1';
 import MissionCore from '../game/core.js';
 import { createScanHunt } from '../game/missions/scan-hunt.js';
 
@@ -241,6 +242,15 @@ class VRApp {
 
         this.checkXR();
         this.checkPhone();
+        // VR by default: on a headset, go immersive without hunting for a button.
+        setupAutoVR({
+            enter: session => this.enterVR(session),
+            isActive: () => Boolean(this.xrSession || this.xrStarting),
+            title: this.entry === 'dodge' ? this.arcadeName : this.entry === 'ride' ? 'VR Deep Space Ride' : 'VR Solar System',
+            sub: this.entry === 'dodge'
+                ? 'Pull the trigger anywhere to enter Meta Quest 3 VR. Grip both Touch Plus controllers.'
+                : 'Pull the trigger anywhere to enter headset VR. Squeeze the grip any time for the menu.'
+        });
         $('loading').style.display = 'none';
         $('mode-menu').classList.add('show');
         $('mode-menu').classList.add(`only-${this.entry}`);
@@ -787,12 +797,16 @@ class VRApp {
         }
     }
 
-    async enterVR() {
+    /** @param {XRSession|null} offered  A session the browser already granted (offerSession). */
+    async enterVR(offered = null) {
         if (this.xrReloadNeeded) {
             location.reload();
             return;
         }
-        if (!navigator.xr || this.xrSession || this.xrStarting) return;
+        if (!navigator.xr || this.xrSession || this.xrStarting) {
+            offered?.end().catch(() => {});
+            return;
+        }
         this.xrStarting = true;
         const button = $('enter-vr');
         const qBtn = $('quest3-launch');
@@ -803,9 +817,7 @@ class VRApp {
             if ($('xr-launch-status')) $('xr-launch-status').textContent = '';
             if (this.stereo) this.exitPhoneVR();
             this.audio.init();
-            session = await navigator.xr.requestSession('immersive-vr', {
-                optionalFeatures: ['hand-tracking']
-            });
+            session = offered || await navigator.xr.requestSession('immersive-vr', XR_SESSION_INIT);
             this.xrSession = session;
             this.xrHead = new THREE.Object3D();
             this._prevQuestInput = null;
@@ -1017,14 +1029,15 @@ class VRApp {
                 ['TOGGLE 3D COCKPIT', 'Show or hide the pilot cabin', 'toggle-cockpit'],
                 [this.autoFly ? 'STOP FLYING' : 'FLY FORWARD', 'Use head direction to steer', 'auto-fly']
             ];
-            options.push(['RETURN TO VIEW', 'Close these controls', 'close'], ['EXIT HEADSET VR', 'Return to the browser', 'exit']);
+            options.push(['RETURN TO VIEW', 'Close these controls', 'close'], ['BACK TO LOBBY', 'Pick another experience', 'lobby'], ['EXIT HEADSET VR', 'Return to the browser', 'exit']);
             const rows = Math.ceil(options.length / 2);
             this.vrMenuItems = options.map(([title, hint, action], i) => mk(
                 label(title, hint, '#64ffda'), i % 2 ? 0.44 : -0.44, (rows / 2 - 0.5 - Math.floor(i / 2)) * 0.31, action, 0.69
             ));
             return;
         }
-        this.vrMenuItems = this.entry === 'ride'
+        const lobbyY = this.entry === 'dodge' ? -0.36 : -0.6;
+        this.vrMenuItems = (this.entry === 'ride'
             ? [
                 mk(label('VR DEEP SPACE RIDE', '3 min · jumpscares & turret', '#ff8b8b'), 0, 0.22, 'ride'),
                 mk(label('SWITCH TO FREE FLIGHT', 'Explore all 13 worlds freely', '#64ffda'), 0, -0.24, 'explore', 0.88)
@@ -1036,7 +1049,7 @@ class VRApp {
                     mk(label('SCAN HUNT', '90 sec · find 5 worlds', '#c4b5fd'), 0.46, 0.25, 'scan-hunt', 0.95),
                     mk(label('NEXT WORLD · WARP', 'Tour planets & moons up close', '#7dd3fc'), -0.46, -0.22, 'next-world', 0.9),
                     mk(label('TOGGLE 3D COCKPIT', 'Fly inside the pilot cabin', '#fcd34d'), 0.46, -0.22, 'toggle-cockpit', 0.9)
-                ];
+                ]).concat(mk(label('◂ BACK TO LOBBY', 'Pick another experience', '#cfe3ff'), 0, lobbyY, 'lobby', 0.62));
     }
 
     toggleVRMenu() {
@@ -1474,6 +1487,8 @@ class VRApp {
             } else if (action === 'comfort') {
                 this.setComfort(!this.comfort);
                 this.toggleVRMenu();
+            } else if (action === 'lobby') {
+                navigateInVR('/', this.xrSession);
             } else if (action === 'exit') {
                 this.xrSession?.end().catch(() => {});
             }
