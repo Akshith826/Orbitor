@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { ArcadeRun, SYSTEMS, SAMPLE_X, roverRocks, roverCrystals } from './arcade-run.js?v=20261127-o1';
+import { ArcadeRun, SYSTEMS, SAMPLE_X, roverRocks, roverCrystals } from './arcade-run.js?v=20261127-o2';
 import {
     buildMissionCabin,
     buildSpaceBackdrop,
@@ -14,8 +14,8 @@ import {
     roundRectPath,
     safeCanvas,
     safeLoadTexture
-} from './quest-assets.js?v=20261127-o1';
-import { setRayFromObject } from './xr-support.js?v=20261127-o1';
+} from './quest-assets.js?v=20261127-o2';
+import { setRayFromObject } from './xr-support.js?v=20261127-o2';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 

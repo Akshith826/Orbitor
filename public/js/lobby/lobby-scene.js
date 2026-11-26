@@ -8,7 +8,7 @@
  * drops the headset session.
  */
 import * as THREE from 'three';
-import { RealSky, initialLocation, askLocation } from './real-sky.js?v=20261127-o1';
+import { RealSky, initialLocation, askLocation } from './real-sky.js?v=20261127-o2';
 
 export const EXPERIENCES = [
     { row: 0, slug: 'vr-ride', url: '/vr-ride', icon: '🎢', tag: 'RIDE · 3 MIN', title: 'VR Deep Space Ride', accent: '#ff8ba7',

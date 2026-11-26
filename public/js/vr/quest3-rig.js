@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { createGlowTexture, createHexShieldTexture, safeCanvas, roundRectPath } from './quest-assets.js?v=20261127-o1';
+import { createGlowTexture, createHexShieldTexture, safeCanvas, roundRectPath } from './quest-assets.js?v=20261127-o2';
 
 const HANDED_DEFAULT = ['left', 'right'];
 

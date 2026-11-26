@@ -12,7 +12,7 @@
  * camera pose and only the rig may be moved.
  */
 import * as THREE from 'three';
-import { BlackHole } from './black-hole.js?v=20261127-o1';
+import { BlackHole } from './black-hole.js?v=20261127-o2';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const easeInOut = p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;

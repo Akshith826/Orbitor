@@ -14,10 +14,10 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { SolarModel } from './solar-model.js?v=20261127-o1';
-import { PLANET_FACTS } from '../vr/planet-announcer.js?v=20261127-o1';
-import { setupAutoVR } from '../vr/auto-vr.js?v=20261127-o1';
-import { readQuestControllers, smoothQuestSticks, pulseQuestController } from '../vr/xr-support.js?v=20261127-o1';
+import { SolarModel } from './solar-model.js?v=20261127-o2';
+import { PLANET_FACTS } from '../vr/planet-announcer.js?v=20261127-o2';
+import { setupAutoVR } from '../vr/auto-vr.js?v=20261127-o2';
+import { readQuestControllers, smoothQuestSticks, pulseQuestController } from '../vr/xr-support.js?v=20261127-o2';
 
 const $ = id => document.getElementById(id);
 const AR_INIT = { requiredFeatures: ['local-floor'], optionalFeatures: ['hit-test', 'hand-tracking', 'anchors', 'plane-detection'] };

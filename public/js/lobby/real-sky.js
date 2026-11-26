@@ -12,7 +12,7 @@
  * the horizon say which way is which.
  */
 import * as THREE from 'three';
-import * as Astronomy from '../vendor/astronomy.js?v=20261127-o1';
+import * as Astronomy from '../vendor/astronomy.js?v=20261127-o2';
 
 const DEG = Math.PI / 180;
 const SKY_R = 480;
@@ -128,7 +128,7 @@ export class RealSky {
     }
 
     async load() {
-        const res = await fetch('/public/data/sky.json?v=20261127-o1');
+        const res = await fetch('/public/data/sky.json?v=20261127-o2');
         if (!res.ok) throw new Error('sky catalogue HTTP ' + res.status);
         this.catalog = await res.json();
         this._buildStars();

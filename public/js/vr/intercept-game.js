@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { InterceptRun } from './intercept-run.js?v=20261127-o1';
+import { InterceptRun } from './intercept-run.js?v=20261127-o2';
 import {
     buildMissionCabin,
     buildSpaceBackdrop,
@@ -9,7 +9,7 @@ import {
     createSolarTexture,
     createSpaceEnvMap,
     ParticlePool
-} from './quest-assets.js?v=20261127-o1';
+} from './quest-assets.js?v=20261127-o2';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 

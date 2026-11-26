@@ -64,7 +64,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
             v.ride.stop();
             return said;
         });
-        const PLANET_FACTS = await page.evaluate(() => import('/public/js/vr/planet-announcer.js?v=20261127-o1').then(m => m.PLANET_FACTS));
+        const PLANET_FACTS = await page.evaluate(() => import('/public/js/vr/planet-announcer.js?v=20261127-o2').then(m => m.PLANET_FACTS));
         const facts = spoken.filter(t => Object.values(PLANET_FACTS).includes(t));
         const keys = facts.map(t => Object.keys(PLANET_FACTS).find(k => PLANET_FACTS[k] === t));
         assert.deepEqual([...keys].sort(), Object.keys(PLANET_FACTS).sort(), 'every planet announced once: ' + keys.join(', '));
