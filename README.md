@@ -6,7 +6,7 @@ standalone app. It needs no database, no accounts and no API keys.
 
 | Experience | URL |
 | --- | --- |
-| VR lobby (every experience) | `/` |
+| VR lobby (every experience) | `/` (also `/games`) |
 | VR Deep Space Ride | `/vr-ride` |
 | VR Solar System (free flight + Scan Hunt) | `/vr-solar-system` |
 | Orbital Intercept | `/games/orbital-intercept` |
@@ -34,15 +34,20 @@ The whole app is built to be used in a headset:
   asks the browser to offer VR (`navigator.xr.offerSession`) and shows a full-screen
   *Enter VR* prompt, so the first trigger pull anywhere puts you in the headset.
   **Stay in 2D** dismisses it for the rest of the browsing session.
-- **You stay in VR between pages.** Launching from the lobby, or choosing **Back to
-  lobby** in a game's grip menu, carries the headset to the next page. Where the
-  browser supports WebXR navigation (`sessiongranted`), the next page resumes VR
-  with no click. Otherwise it shows *Continue in VR* and needs one trigger pull.
+- **You never leave VR.** The lobby, the ride, the solar system and all seven
+  games live on one page. Launching from the lobby, choosing **Back to lobby**
+  in the grip menu, or using browser back/forward switches the experience in
+  place (the address bar still updates), so the headset session is never
+  dropped and there is no 2D loading screen in between.
+- **Planet facts on the ride.** As the Deep Space Ride closes in on the Sun and
+  each planet, Mission Control says a one-sentence fact about it (and shows it
+  on the cockpit display). It follows the **AI Mission Control Voice** setting.
 - Desktops and phones without a headset see no prompt. The games, ride and phone
   modes behave exactly as before.
 
-The logic lives in [`public/js/vr/auto-vr.js`](public/js/vr/auto-vr.js) and
-[`public/js/lobby/lobby.js`](public/js/lobby/lobby.js).
+The logic lives in [`public/js/vr/auto-vr.js`](public/js/vr/auto-vr.js),
+[`public/js/lobby/lobby-scene.js`](public/js/lobby/lobby-scene.js) and
+[`public/js/vr/planet-announcer.js`](public/js/vr/planet-announcer.js).
 
 ## Quick start
 
@@ -78,6 +83,7 @@ look** or **Phone VR (Cardboard)** split-screen.
 | `npm test` | Vitest unit tests for the VR modules plus server route tests |
 | `npm run verify:quest` | Puppeteer check of the hub and all 7 Quest games (server must be running) |
 | `npm run verify:auto-vr` | Simulated-headset check that every page offers VR and enters it on one click (server must be running) |
+| `npm run verify:lobby` | Lobby → ride → games → back without a page reload, plus every planet fact on the ride (server must be running) |
 | `npm run verify:vr` | Puppeteer check of desktop, phone gyro and split-screen modes for the ride and solar system |
 
 The verify scripts read `VR_TEST_URL` (default `http://localhost:5000`). To use an
@@ -98,8 +104,8 @@ Deploy with `vercel` or import the repository in the Vercel dashboard (no extra 
 ```
 server.js            Express server: pages, static assets, three.js, tiny API
 routes/game.js       Server-side Scan Hunt scoring (not stored)
-views/               index.html (3D VR lobby), vr-working.html (WebXR page), quest-guide.html
-public/js/lobby/     The lobby scene
+views/               vr-working.html (the WebXR page: lobby + every experience), quest-guide.html
+public/js/lobby/     The lobby scene (launch panels, Earth, starfield)
 public/js/vr/        auto-vr.js (VR by default), ride, cockpit, Quest 3 rig, the 7 games, phone stereo, gaze, remote input
 public/js/game/      Mission core + Scan Hunt
 public/textures/     Planet and star-map textures

@@ -46,11 +46,10 @@ app.use(express.json({ limit: '64kb' }));
 const view = name => (req, res) => res.sendFile(path.join(__dirname, 'views', name));
 
 /* ── pages ─────────────────────────────────────────────────────────── */
-// Hub with every experience. `/games` and `/app` are the links the VR page and
-// guide use to go "back", so they land here too.
-app.get(['/', '/games', '/app'], view('index.html'));
-// One WebXR page hosts every mode; the path picks which one it offers.
-app.get(['/vr-ride', '/vr-solar-system', '/vr-working'], view('vr-working.html'));
+// One WebXR page hosts the lobby and every experience; the path picks which one
+// it opens with, and it switches between them in place so a headset session is
+// never dropped. `/games` and `/app` are older "back" links; they open the lobby.
+app.get(['/', '/games', '/app', '/vr-ride', '/vr-solar-system', '/vr-working'], view('vr-working.html'));
 const QUEST_GAMES = ['orbital-intercept', 'asteroid-dodge', 'lunar-landing', 'orbital-docking',
     'satellite-repair', 'mars-rover', 'space-rescue'];
 app.get(QUEST_GAMES.map(slug => '/games/' + slug), view('vr-working.html'));

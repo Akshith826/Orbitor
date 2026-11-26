@@ -414,6 +414,30 @@
             margin: 12px 0 0; font-size: 12.5px; color: #fbbf24; line-height: 1.5;
         }
         #quest3-requirement.ready { color: #64ffda; }
+
+        /* ── Orbitor lobby (the home screen lives on this page) ── */
+        #lobby-dock, #lobby-hint { display: none; }
+        body.lobby-mode #lobby-dock { display: flex; }
+        body.lobby-mode #lobby-hint { display: block; }
+        body.lobby-mode #mode-menu, body.lobby-mode #home-link, body.lobby-mode #btn-recenter, body.lobby-mode #btn-menu { display: none !important; }
+        body.lobby-mode #vr-container canvas { cursor: grab; }
+        body.in-vr #lobby-dock, body.in-vr #lobby-hint { display: none !important; }
+        #lobby-hint { position: fixed; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 20; font: 13px Inter, sans-serif;
+            color: #9aa8c7; background: rgba(8,15,28,.62); border: 1px solid rgba(255,255,255,.14); border-radius: 999px;
+            padding: 7px 14px; white-space: nowrap; pointer-events: none; }
+        #lobby-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; gap: 8px; overflow-x: auto; scrollbar-width: none;
+            justify-content: safe center; padding: 12px 14px max(14px, env(safe-area-inset-bottom));
+            background: linear-gradient(transparent, rgba(2,4,10,.85) 40%); }
+        #lobby-dock::-webkit-scrollbar { display: none; }
+        #lobby-dock a { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; min-width: 118px; padding: 10px 14px; border-radius: 14px;
+            text-decoration: none; color: #e8eefc; background: rgba(8,15,28,.62); border: 1px solid rgba(255,255,255,.14);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font: 600 13px Inter, sans-serif; }
+        #lobby-dock a small { color: var(--c, #64ffda); font-size: 10px; letter-spacing: .12em; font-weight: 700; }
+        #lobby-dock a:hover, #lobby-dock a:focus-visible { border-color: var(--c, #64ffda); outline: none; }
+        #lobby-guide { position: fixed; top: max(14px, env(safe-area-inset-top)); right: 18px; z-index: 21; display: none; }
+        body.lobby-mode #lobby-guide { display: inline-flex; }
+        body.in-vr #lobby-guide { display: none !important; }
+        @media (max-width: 600px) { #lobby-hint { bottom: 104px; font-size: 12px; } }
     </style>
 
     <!-- ═══ Liquid Glass ═══════════════════════════════════════════════ -->
@@ -440,13 +464,13 @@
     <div id="error">
         <h2>WebGL failed to start</h2>
         <p id="error-msg"></p>
-        <a class="chip" href="/">← Back to home</a>
+        <a class="chip" href="/">← Back to lobby</a>
     </div>
 
     <!-- top bar -->
     <div class="hud" id="top-bar">
-        <a href="/" class="chip ghost">← Home</a>
-        <div id="brand">SPACEVERSE · VR</div>
+        <a href="/" class="chip ghost" id="home-link">← Lobby</a>
+        <div id="brand">ORBITOR · VR</div>
         <div style="display:flex; gap:8px;">
             <button id="btn-recenter" class="chip ghost" title="Recentre view (V)">⟲</button>
             <button id="btn-menu" class="chip ghost">☰ Menu</button>
@@ -484,7 +508,7 @@
     <!-- mode menu -->
     <div id="mode-menu">
         <div class="menu-inner">
-            <a href="/" class="chip ghost" style="margin-bottom:14px;">← Mission deck</a>
+            <a href="/" class="chip ghost" style="margin-bottom:14px;">← Lobby</a>
             <h1 class="menu-title">
                 <span class="for-explore">Explore the <em>solar system</em></span>
                 <span class="for-ride">VR <em>Deep Space Ride</em></span>
@@ -595,7 +619,7 @@
                 <div class="quest3-actions">
                     <button id="quest3-launch" class="chip" type="button" disabled>🥽 Checking Meta Quest 3…</button>
                     <a href="/quest-guide" class="chip ghost">Meta Quest 3 setup</a>
-                    <a href="/games" class="chip ghost">← Back to Arcade</a>
+                    <a href="/" class="chip ghost">← Back to lobby</a>
                 </div>
                 <p id="quest3-requirement" role="status">Checking for Meta Quest 3 WebXR support…</p>
             </section>
@@ -631,24 +655,6 @@
             If no button events appear, check the remote’s manual for another mode.</p>
     </dialog>
 
-    <script>
-        (function () {
-            var dodge = /^\/games\//i.test(location.pathname);
-            var ride = location.pathname.indexOf('vr-ride') !== -1 ||
-                location.search.indexOf('mode=ride') !== -1;
-            var menu = document.getElementById('mode-menu');
-            menu.classList.add(dodge ? 'only-dodge' : ride ? 'only-ride' : 'only-explore');
-            if (dodge) {
-                document.body.classList.add('quest-only');
-                menu.classList.add('quest-only');
-                document.title = 'Meta Quest 3 VR — SpaceVerse Arcade';
-                document.querySelectorAll('a[href="/"]').forEach(function (link) {
-                    link.href = '/games';
-                    link.textContent = '← Arcade';
-                });
-            }
-        })();
-    </script>
 
     <!-- explore hud -->
     <div id="explore-hud" class="hud">
@@ -722,6 +728,21 @@
 
     <div id="toast"></div>
 
+    <!-- lobby: every experience as a plain link (keyboard, screen readers); same-page navigation -->
+    <a id="lobby-guide" class="chip ghost" href="/quest-guide">📘 Meta Quest guide</a>
+    <p id="lobby-hint">Drag to look around · click a panel to launch</p>
+    <nav id="lobby-dock" aria-label="Experiences">
+        <a href="/vr-ride" style="--c:#ff8ba7"><small>RIDE</small>🎢 Deep Space Ride</a>
+        <a href="/vr-solar-system" style="--c:#7aa2ff"><small>FREE FLIGHT</small>🌌 Solar System</a>
+        <a href="/games/orbital-intercept" data-slug="orbital-intercept" style="--c:#64ffda"><small>QUEST 3</small>🛡️ Orbital Intercept</a>
+        <a href="/games/asteroid-dodge" data-slug="asteroid-dodge" style="--c:#ffb46b"><small>QUEST 3</small>☄️ Asteroid Dodge</a>
+        <a href="/games/lunar-landing" data-slug="lunar-landing" style="--c:#cfe1ff"><small>QUEST 3</small>🌕 Lunar Landing</a>
+        <a href="/games/orbital-docking" data-slug="orbital-docking" style="--c:#80e8ff"><small>QUEST 3</small>🛰️ Orbital Docking</a>
+        <a href="/games/satellite-repair" data-slug="satellite-repair" style="--c:#ffd196"><small>QUEST 3</small>🔧 Satellite Repair</a>
+        <a href="/games/mars-rover" data-slug="mars-rover" style="--c:#ffb281"><small>QUEST 3</small>🪨 Mars Rover</a>
+        <a href="/games/space-rescue" data-slug="space-rescue" style="--c:#8ff2d9"><small>QUEST 3</small>🧑‍🚀 Space Rescue</a>
+    </nav>
+
     <script type="importmap">
     {
         "imports": {
@@ -730,6 +751,6 @@
         }
     }
     </script>
-    <script type="module" src="/public/js/vr/main.js?v=20261126-lobby"></script>
+    <script type="module" src="/public/js/vr/main.js?v=20261126-spa3"></script>
 </body>
 </html>

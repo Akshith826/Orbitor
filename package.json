@@ -14,7 +14,8 @@
     "test": "vitest run",
     "verify:vr": "node scripts/verify-vr-modes.cjs",
     "verify:quest": "node scripts/verify-quest3-arcade.cjs",
-    "verify:auto-vr": "node scripts/verify-auto-vr.cjs"
+    "verify:auto-vr": "node scripts/verify-auto-vr.cjs",
+    "verify:lobby": "node scripts/verify-lobby-flow.cjs"
   },
   "dependencies": {
     "compression": "^1.8.1",

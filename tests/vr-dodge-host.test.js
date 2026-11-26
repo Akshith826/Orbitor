@@ -36,6 +36,7 @@ beforeAll(async () => {
         setPhoneUILayer, PHONE_UI_LAYER, VR_GAMES, VR_ARCADE_META, InterceptGame, Quest3Rig,
         questOnlyVRStatus, readThumbstick, readQuestControllers, pulseQuestController, setRayFromObject, guardXRFrames,
         XR_SESSION_INIT: { optionalFeatures: ['hand-tracking'] }, setupAutoVR: () => Promise.resolve({ supported: false }), navigateInVR: () => {},
+        PlanetAnnouncer: class { constructor() { this.facts = {}; } reset() {} check() { return null; } }, LobbyScene: class {},
         localStorage: { getItem: k => localStore.get(k) || null, setItem: (k, v) => localStore.set(k, v) },
         navigator: navigatorStub, queueMicrotask });
 });
@@ -258,7 +259,8 @@ describe('Dodge mode wiring', () => {
         ['/games/asteroid-dodge', '', 'dodge'], ['/games/asteroid-dodge/', '?mode=ride', 'dodge'],
         ['/GAMES/ASTEROID-DODGE', '', 'dodge'], ['/games/lunar-landing', '', 'dodge'],
         ['/games/space-rescue/', '', 'dodge'], ['/vr-solar-system', '', 'explore'],
-        ['/vr-ride', '', 'ride'], ['/vr-working', '?mode=ride', 'ride']
+        ['/vr-ride', '', 'ride'], ['/vr-working', '?mode=ride', 'ride'],
+        ['/', '', 'lobby'], ['/games', '', 'lobby'], ['/app/', '', 'lobby']
     ])('resolves the correct experience for %s %s', (pathname, search, entry) => {
         location.pathname = pathname; location.search = search;
         expect(new VRApp().entry).toBe(entry);

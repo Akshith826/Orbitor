@@ -53,7 +53,7 @@ async function ready(page, url) {
         await ready(page, '/');
         await new Promise(r => setTimeout(r, 500));
         assert.equal(await page.$('#auto-vr'), null, 'no prompt without a headset');
-        assert.equal(await page.$eval('#enter-vr', b => b.hidden), true, 'Enter VR hidden without a headset');
+        assert.equal(await page.$eval('#enter-vr', b => b.offsetParent === null), true, 'no Enter VR button in the lobby without a headset');
         console.log('No headset: no VR prompt ✓');
 
         await page.evaluateOnNewDocument(fakeHeadset);

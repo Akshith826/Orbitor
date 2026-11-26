@@ -34,7 +34,9 @@ import { VR_GAMES, VR_ARCADE_META } from './arcade-run.js?v=20261125-q3';
 import { Quest3Rig } from './quest3-rig.js?v=20261125-q3';
 import { immersiveVRStatus, questOnlyVRStatus, readThumbstick, readQuestControllers, pulseQuestController, setRayFromObject } from './xr-support.js?v=20261125-xr1';
 import { guardXRFrames } from './xr-frame-guard.js?v=20261125-xr1';
-import { setupAutoVR, navigateInVR, XR_SESSION_INIT } from './auto-vr.js?v=20261126-1';
+import { setupAutoVR, navigateInVR, XR_SESSION_INIT } from './auto-vr.js?v=20261126-2';
+import { LobbyScene } from '../lobby/lobby-scene.js?v=20261126-3';
+import { PlanetAnnouncer } from './planet-announcer.js?v=20261126-3';
 import MissionCore from '../game/core.js';
 import { createScanHunt } from '../game/missions/scan-hunt.js';
 
@@ -43,17 +45,14 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const DODGE_DIFFICULTIES = ['practice', 'normal', 'expert'];
 const DODGE_SENSITIVITIES = { low: 0.72, standard: 1, high: 1.35 };
 
+// Every URL this one page can show without reloading (so a headset session survives).
+const LOBBY_PATH = /^\/(?:games|app)?\/?$/i;
+const APP_PATH = /^\/(?:|games|app|vr-ride|vr-solar-system|vr-working|games\/[a-z-]+)\/?$/i;
+
 class VRApp {
     constructor() {
         this.mode = 'menu';
-        const slug = location.pathname.match(/^\/games\/([a-z-]+)\/?$/i)?.[1]?.toLowerCase();
-        this.arcadeMission = Object.hasOwn(VR_GAMES, slug) ? VR_GAMES[slug] : null;
-        this.arcadeMeta = Object.hasOwn(VR_ARCADE_META, slug) ? VR_ARCADE_META[slug] : null;
-        this.arcadeSlug = slug;
-        this.isIntercept = slug === 'orbital-intercept';
-        this.entry = (slug === 'asteroid-dodge' || this.isIntercept || this.arcadeMission) ? 'dodge' : (location.pathname.indexOf('vr-ride') !== -1 ||
-            location.search.indexOf('mode=ride') !== -1) ? 'ride' : 'explore';
-        this.questOnly = this.entry === 'dodge';
+        this.applyRoute(location.pathname, location.search);
         this._prevQuestInput = null;
         this._savedArcadeRun = null;
         this.clock = new THREE.Clock();
@@ -107,6 +106,182 @@ class VRApp {
             (window.matchMedia('(pointer: coarse)').matches || mobileUA);
     }
 
+    /** Decide which experience a URL means. Lobby, ride, explore or a Quest game ('dodge'). */
+    applyRoute(pathname, search = '') {
+        const lobby = LOBBY_PATH.test(pathname);
+        const slug = lobby ? undefined : pathname.match(/^\/games\/([a-z-]+)\/?$/i)?.[1]?.toLowerCase();
+        this.arcadeMission = Object.hasOwn(VR_GAMES, slug) ? VR_GAMES[slug] : null;
+        this.arcadeMeta = Object.hasOwn(VR_ARCADE_META, slug) ? VR_ARCADE_META[slug] : null;
+        this.arcadeSlug = slug;
+        this.isIntercept = slug === 'orbital-intercept';
+        this.entry = lobby ? 'lobby' : (slug === 'asteroid-dodge' || this.isIntercept || this.arcadeMission) ? 'dodge' : (pathname.indexOf('vr-ride') !== -1 ||
+            search.indexOf('mode=ride') !== -1) ? 'ride' : 'explore';
+        this.questOnly = this.entry === 'dodge';
+    }
+
+    get usesSolarSystem() { return this.entry === 'ride' || this.entry === 'explore'; }
+
+    /** Build the solar system once, the first time an experience needs it. */
+    ensureSystem() {
+        if (!this._systemReady) {
+            this._systemReady = this.system.build(msg => {
+                this.setStatus(msg);
+                if (this._waitingForSystem) this.lobby?.setStatus(msg, true);
+            }).then(() => {
+                this.system.setLabelsVisible(false);
+                if (this.mode === 'lobby' || this.mode === 'dodge') this.system.root.visible = false;
+            });
+        }
+        return this._systemReady;
+    }
+
+    /** Create (once) and select the game for the current Quest 3 slug. */
+    ensureArcadeGame() {
+        this._arcadeCache = this._arcadeCache || {};
+        const key = this.arcadeSlug || 'asteroid-dodge';
+        let game = this._arcadeCache[key];
+        if (!game) {
+            const gameOpts = { renderer: this.renderer, audio: this.audio, haptics: (h, i, ms) => this.pulseHand(h, i, ms) };
+            game = this.isIntercept ? new InterceptGame(this.scene, gameOpts)
+                : this.arcadeMission ? new ArcadeFlight(this.scene, this.arcadeSlug, gameOpts)
+                    : new DodgeGame(this.scene, gameOpts);
+            this._arcadeCache[key] = game;
+        }
+        this.interceptGame = this.isIntercept ? game : null;
+        this.flightGame = !this.isIntercept && this.arcadeMission ? game : null;
+        this.dodge = !this.isIntercept && !this.arcadeMission ? game : null;
+        this.configureArcadeLauncher();
+    }
+
+    /** Menu classes, page title and back links for the current experience. */
+    applyPageChrome() {
+        const menu = $('mode-menu');
+        if (menu?.classList) {
+            for (const c of ['only-explore', 'only-ride', 'only-dodge', 'only-lobby', 'quest-only']) menu.classList.remove(c);
+            menu.classList.add(`only-${this.entry}`);
+            if (this.questOnly) menu.classList.add('quest-only');
+        }
+        document.body?.classList?.toggle('quest-only', this.questOnly);
+        document.body?.classList?.toggle('lobby-mode', this.entry === 'lobby');
+        if (this.entry === 'lobby') document.title = 'Orbitor · VR Lobby';
+        else if (this.entry === 'ride') document.title = 'VR Deep Space Ride · Orbitor';
+        else if (this.entry === 'explore') document.title = 'VR Solar System · Orbitor';
+        // dodge titles are set by configureArcadeLauncher()
+    }
+
+    /** Same-page navigation: keeps the renderer, audio and any headset session alive. */
+    async goTo(url, { push = true } = {}) {
+        const u = new URL(url, location.href);
+        if (u.origin !== location.origin || !APP_PATH.test(u.pathname)) {
+            if (this.xrSession) navigateInVR(u.href, this.xrSession);
+            else location.href = u.href;
+            return;
+        }
+        if (push && (u.pathname + u.search) !== (location.pathname + location.search)) {
+            history.pushState({ orbitor: true }, '', u.pathname + u.search);
+        }
+        await this.switchExperience(u.pathname, u.search);
+    }
+
+    async switchExperience(pathname, search = '') {
+        const token = (this._switchToken || 0) + 1;
+        this._switchToken = token;
+        if (MissionCore.snapshot().running) MissionCore.abort('player-left');
+        this.stopSpeech();
+        if (this.stereo) this.exitPhoneVR();
+        this.leaveDodge();
+        this.ride.stop();
+        this.scares.clear?.();
+        this.clearWarning();
+        this.cockpit.setVisible(false);
+        document.body.classList.remove('cockpit-on');
+        if (this.vrMenu) this.vrMenu.visible = false;
+        if (this.vrInfoPanel) this.vrInfoPanel.visible = false;
+        $('info-card').classList.remove('show');
+        $('ride-hud').classList.remove('show');
+        $('explore-hud').classList.remove('show');
+
+        this.applyRoute(pathname, search);
+        this.applyPageChrome();
+        if (this.entry === 'lobby') { this.enterLobby(); return; }
+
+        this.mode = 'menu';
+        this.lobby.setVisible(false);
+        if (this.entry === 'dodge') {
+            this.ensureArcadeGame();
+            this.system.root.visible = false;
+        } else {
+            if (!this._systemBuilt) {
+                this.lobby.setVisible(true);
+                this.lobby.setStatus('Loading the solar system…', true);
+                this._waitingForSystem = true;
+                try { await this.ensureSystem(); } finally { this._waitingForSystem = false; }
+                if (token !== this._switchToken) return;
+                this._systemBuilt = true;
+                this.lobby.setVisible(false);
+                this.lobby.setStatus('Point and pull the trigger · or click a panel');
+            }
+            this.system.root.visible = true;
+            this.dolly.position.set(0, 0, 0);
+            this.placeAtEarth();
+        }
+        this.questRig?.setToolProfile(this.questOnly ? this.arcadeSlug : 'default');
+        this.buildVRMenu();
+        this.checkXR();
+        this.checkPhone();
+        if (this.renderer.xr.isPresenting && this.questOnly) this.startDodge();
+        else this.toMenu({ force: true });
+    }
+
+    /** The home screen: launch panels around the viewer, nothing else running. */
+    enterLobby() {
+        this.mode = 'lobby';
+        this.autoFly = false;
+        this.focusTween = null;
+        this.system.root.visible = false;
+        this.system.setLabelsVisible(false);
+        this.cockpit.setVisible(false);
+        this.lobby.setVisible(true);
+        this.lobby.setStatus('Point and pull the trigger · or click a panel');
+        this.lobbyLaunching = false;
+        this.dolly.position.set(0, 0, 0);
+        this.yaw = 0; this.pitch = -0.04; this.lookYaw = 0; this.lookPitch = 0;
+        this.applyLook();
+        this.camera.fov = this.lobbyFov();
+        this.camera.updateProjectionMatrix();
+        this.questRig?.setToolProfile('default');
+        $('mode-menu').classList.remove('show');
+        $('ride-hud').classList.remove('show');
+        $('explore-hud').classList.remove('show');
+        $('dodge-hud').classList.remove('show');
+        this.audio.setPad(0.12);
+        this.audio.setEngine(0);
+        this.setHud('ORBITOR', 'Choose an experience');
+        // Warm the solar system up in the background so the ride starts fast.
+        if (!this._systemBuilt) {
+            const idle = window.requestIdleCallback || (fn => setTimeout(fn, 1200));
+            idle(() => this.ensureSystem().then(() => { this._systemBuilt = true; }));
+        }
+    }
+
+    lobbyFov() {
+        return window.innerWidth < window.innerHeight ? 88 : 70;
+    }
+
+    /** Launch an experience from a lobby panel (mouse, touch or controller). */
+    launchFromLobby(exp) {
+        if (this.lobbyLaunching) return;
+        this.lobbyLaunching = true;
+        this.lobby.flash(exp);
+        this.audio.init();
+        this.audio.blip(880);
+        this.pulse(0.5, 70);
+        this.lobby.setStatus('Launching ' + exp.title + '…', true);
+        setTimeout(() => {
+            this.goTo(exp.url).finally(() => { this.lobbyLaunching = false; });
+        }, 240);
+    }
+
     async init() {
         const container = $('vr-container');
 
@@ -155,9 +330,11 @@ class VRApp {
         }
 
         this.system = new SolarSystem(this.scene, { quality });
-        if (this.arcadeMission || this.isIntercept) this.setStatus('Preparing ' + this.arcadeName + ' for Meta Quest 3…');
+        this.lobby = new LobbyScene(this.scene, this.renderer);
+        const lobbyBuilt = this.lobby.build();
+        if (this.entry === 'lobby') { this.setStatus('Opening the Orbitor lobby…'); await lobbyBuilt; }
         else if (this.questOnly) this.setStatus('Preparing ' + this.arcadeName + ' for Meta Quest 3…');
-        else await this.system.build(msg => this.setStatus(msg));
+        else { await this.ensureSystem(); this._systemBuilt = true; }
         this.system.setLabelsVisible(false);
 
         this.scares = new ScareDirector({
@@ -194,13 +371,7 @@ class VRApp {
             this.stereoEffect.setViewerSettings(saved ? JSON.parse(saved) : { spacing: previous?.spacing, size: 0.96, shape: 'wide' });
         }
         catch (_) { /* missing, unavailable or invalid saved preferences */ }
-        if (this.entry === 'dodge') {
-            const gameOpts = { renderer: this.renderer, audio: this.audio, haptics: (h, i, ms) => this.pulseHand(h, i, ms) };
-            if (this.isIntercept) this.interceptGame = new InterceptGame(this.scene, gameOpts);
-            else if (this.arcadeMission) this.flightGame = new ArcadeFlight(this.scene, this.arcadeSlug, gameOpts);
-            else this.dodge = new DodgeGame(this.scene, gameOpts);
-            this.configureArcadeLauncher();
-        }
+        if (this.entry === 'dodge') this.ensureArcadeGame();
         const pauseDodge = () => { if (this.mode === 'dodge') this.arcadeGame.run.pause(); };
         window.addEventListener('blur', pauseDodge);
         document.addEventListener('visibilitychange', () => { if (document.hidden) pauseDodge(); });
@@ -232,8 +403,18 @@ class VRApp {
         this.raycaster = new THREE.Raycaster();
         this.pointer = new THREE.Vector2();
 
-        if (!this.arcadeMission && !this.isIntercept) this.placeAtEarth();
+        if (this.usesSolarSystem) this.placeAtEarth();
         window.addEventListener('resize', () => this.onResize());
+        // Same-page navigation: back/forward and in-app links never reload the page.
+        window.addEventListener('popstate', () => this.goTo(location.href, { push: false }));
+        document.addEventListener('click', e => {
+            const a = e.target.closest?.('a[href]');
+            if (!a || a.target || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+            const u = new URL(a.href, location.href);
+            if (u.origin !== location.origin || !APP_PATH.test(u.pathname)) return;
+            e.preventDefault();
+            this.goTo(u.href);
+        });
 
         this.renderer.setAnimationLoop((_time, frame) => {
             if (frame && this.xrGuard) this.xrGuard.render(() => this.loop(frame));
@@ -246,18 +427,17 @@ class VRApp {
         setupAutoVR({
             enter: session => this.enterVR(session),
             isActive: () => Boolean(this.xrSession || this.xrStarting),
-            title: this.entry === 'dodge' ? this.arcadeName : this.entry === 'ride' ? 'VR Deep Space Ride' : 'VR Solar System',
-            sub: this.entry === 'dodge'
+            title: this.entry === 'lobby' ? 'Enter the Orbitor lobby' : this.entry === 'dodge' ? this.arcadeName : this.entry === 'ride' ? 'VR Deep Space Ride' : 'VR Solar System',
+            sub: this.entry === 'lobby'
+                ? 'Pull the trigger anywhere to step into VR. Point at a panel and pull again to launch.'
+                : this.entry === 'dodge'
                 ? 'Pull the trigger anywhere to enter Meta Quest 3 VR. Grip both Touch Plus controllers.'
                 : 'Pull the trigger anywhere to enter headset VR. Squeeze the grip any time for the menu.'
         });
         $('loading').style.display = 'none';
-        $('mode-menu').classList.add('show');
-        $('mode-menu').classList.add(`only-${this.entry}`);
-        if (this.questOnly) {
-            document.body?.classList?.add('quest-only');
-            $('mode-menu').classList.add('quest-only');
-        }
+        this.applyPageChrome();
+        if (this.entry === 'lobby') this.enterLobby();
+        else $('mode-menu').classList.add('show');
 
         window.__vr = this;
         this.missionCore = MissionCore;
@@ -897,7 +1077,7 @@ class VRApp {
         this.xrShowLauncher = false;
         this._snapLock = false;
         document.body.classList.remove('in-vr');
-        if (showLauncher) $('mode-menu').classList.add('show');
+        if (showLauncher && this.mode !== 'lobby') $('mode-menu').classList.add('show');
         this.vrMenu.visible = false;
         if (this.vrInfoPanel) this.vrInfoPanel.visible = false;
         if (this.mode === 'explore' || this.mode === 'mission') this.applyLook();
@@ -1036,6 +1216,13 @@ class VRApp {
             ));
             return;
         }
+        if (this.entry === 'lobby') {
+            this.vrMenuItems = [
+                mk(label('RETURN TO LOBBY', 'Close this menu', '#64ffda'), 0, 0.2, 'close', 0.8),
+                mk(label('EXIT HEADSET VR', 'Return to the browser', '#cfe3ff'), 0, -0.16, 'exit', 0.8)
+            ];
+            return;
+        }
         const lobbyY = this.entry === 'dodge' ? -0.36 : -0.6;
         this.vrMenuItems = (this.entry === 'ride'
             ? [
@@ -1058,7 +1245,7 @@ class VRApp {
         if (!show) { this.vrMenu.visible = false; return; }
         if (this.mode === 'ride') this.ride.pause();
         if (this.mode === 'dodge') this.arcadeGame.run.pause();
-        this.buildVRMenu(this.mode !== 'menu');
+        this.buildVRMenu(this.mode !== 'menu' && this.mode !== 'lobby');
         this.vrMenu.visible = true;
         this.showMenuInfo(this.vrMenu, false);
         const head = this.xrHead || this.camera;
@@ -1068,6 +1255,12 @@ class VRApp {
         this.vrMenu.position.copy(head.position).addScaledVector(forward, 1.75);
         this.vrMenu.updateWorldMatrix(true, true);
         this.audio.blip(600);
+    }
+
+    lobbyHit(controller) {
+        if (!controller.visible || !this.lobby.visible) return null;
+        setRayFromObject(this.raycaster, controller);
+        return this.lobby.hit(this.raycaster);
     }
 
     menuHit(controller) {
@@ -1221,6 +1414,10 @@ class VRApp {
             this.dragging = false;
         });
         window.addEventListener('mousemove', e => {
+            if (this.mode === 'lobby') {
+                this._lobbyPointer = this._lobbyPointer || new THREE.Vector2();
+                this._lobbyPointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+            }
             if (!this.dragging) return;
             const dx = e.clientX - this.lastX, dy = e.clientY - this.lastY;
             this.dragMoved += Math.abs(dx) + Math.abs(dy);
@@ -1301,7 +1498,7 @@ class VRApp {
     }
 
     remoteAction(action) {
-        if (this.mode === 'menu' || this.renderer.xr.isPresenting) return;
+        if (this.mode === 'menu' || this.mode === 'lobby' || this.renderer.xr.isPresenting) return;
         if (action === 'primary') this.onPhoneTap();
         if (action === 'recenter') this.recenterView();
         if (action === 'menu') {
@@ -1463,6 +1660,11 @@ class VRApp {
     }
 
     onControllerSelect(controller) {
+        if (this.mode === 'lobby' && !this.vrMenu.visible) {
+            const hit = this.lobbyHit(controller);
+            if (hit) this.launchFromLobby(hit.exp);
+            return;
+        }
         const item = this.menuHit(controller);
         if (this.vrMenu.visible) {
             if (!item) return;
@@ -1488,7 +1690,7 @@ class VRApp {
                 this.setComfort(!this.comfort);
                 this.toggleVRMenu();
             } else if (action === 'lobby') {
-                navigateInVR('/', this.xrSession);
+                this.goTo('/');
             } else if (action === 'exit') {
                 this.xrSession?.end().catch(() => {});
             }
@@ -1522,6 +1724,14 @@ class VRApp {
     }
 
     pickAt(cx, cy) {
+        if (this.mode === 'lobby') {
+            this.pointer.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
+            this.camera.updateWorldMatrix(true, false);
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const hit = this.lobby.hit(this.raycaster);
+            if (hit) this.launchFromLobby(hit.exp);
+            return;
+        }
         if (this.stereo || (this.mode === 'dodge' && !this.flightGame)) return;
         if (this.mode === 'ride') {
             // Clicking during an incoming asteroid hazard fires the deflector turret
@@ -1621,6 +1831,7 @@ class VRApp {
     /* ── mode switching ─────────────────────────────────────────────── */
 
     toMenu(options = {}) {
+        if (this.entry === 'lobby') { this.enterLobby(); return true; }
         if (this.mode === 'mission' && MissionCore.snapshot().running && !options.force) {
             const ok = window.confirm('Abandon this run? Your progress will not be scored.');
             if (!ok) return false;
@@ -1934,6 +2145,8 @@ class VRApp {
         this.audio.setPad(0.18);
         this.ride.prepare();
         this.ride.start();
+        if (!this.planetAnnouncer) this.planetAnnouncer = new PlanetAnnouncer();
+        this.planetAnnouncer.reset();
         this.lookYaw = 0; this.lookPitch = 0;
         if (this.gyroActive) this.gyro.recenter();
         this.cockpit.reset();
@@ -1975,7 +2188,8 @@ class VRApp {
         if (this.cockpit) this.cockpit.setNarration(text);
         $('narration').textContent = text;
         this.setHud(this.hudText.title, text.slice(0, 72));
-        this.speak(text);
+        // During the ride, queue behind a planet fact instead of cutting it off.
+        this.speak(text, this.mode !== 'ride');
     }
 
     onScareEvent(e) {
@@ -2158,6 +2372,7 @@ class VRApp {
         // The XR manager owns the eye-buffer size until the session ends.
         if (this.xrSession || this.renderer.xr.isPresenting) return;
         this.camera.aspect = window.innerWidth / window.innerHeight;
+        if (this.mode === 'lobby') this.camera.fov = this.lobbyFov();
         this.camera.updateProjectionMatrix();
         const ratio = this.renderPixelRatio();
         this.renderer.setPixelRatio(ratio);
@@ -2235,7 +2450,7 @@ class VRApp {
         if (frame && this.renderer.getContext().isContextLost()) throw new Error('The headset graphics context was lost.');
         this.remote.update();
         const camPos = this.camera.getWorldPosition(this._camPos || (this._camPos = new THREE.Vector3()));
-        if (!this.arcadeMission && !this.isIntercept && this.mode !== 'dodge') this.system.update(dt, camPos);
+        if (this.system.root.visible && this.mode !== 'dodge' && this.mode !== 'lobby') this.system.update(dt, camPos);
 
         const questInput = this.xrSession
             ? readQuestControllers(this.xrSession, this._prevQuestInput)
@@ -2266,7 +2481,9 @@ class VRApp {
                 this.updateDodgeHud();
             }
         }
+        else if (this.mode === 'lobby') this.updateLobby(dt);
         else if (this.entry !== 'dodge') this.flyUpdate(dt);
+        if (this.mode === 'ride' && this.ride.playing) this.announcePlanets();
         this.camera.updateWorldMatrix(true, false);
         this.gazeUpdate(dt);
 
@@ -2326,8 +2543,49 @@ class VRApp {
             return Boolean(frame && tracking);
         }
         else if (this.stereo) this.stereoEffect.render(this.scene, this.camera);
-        else if (this.composer) this.composer.render();
+        // The lobby skips bloom so stars stay pin-sharp and panels stay legible.
+        else if (this.composer && this.mode !== 'lobby') this.composer.render();
         else this.renderer.render(this.scene, this.camera);
+    }
+
+    updateLobby(dt) {
+        const hovered = new Set();
+        if (this.renderer.xr.isPresenting) {
+            if (!this.vrMenu?.visible) {
+                for (const slot of this.questRig?.slots || []) {
+                    const hit = this.lobbyHit(slot.controller);
+                    if (hit) hovered.add(hit.mesh);
+                    slot.rayLine.scale.z = hit ? hit.distance : 5.5;
+                    slot.hitDot.position.z = -(hit ? hit.distance : 5.5);
+                }
+            }
+        } else if (this._lobbyPointer && !this.dragging) {
+            this.raycaster.setFromCamera(this._lobbyPointer, this.camera);
+            const hit = this.lobby.hit(this.raycaster);
+            if (hit) hovered.add(hit.mesh);
+            this.renderer.domElement.style.cursor = hit ? 'pointer' : 'grab';
+        }
+        if (this.lobby.update(dt, this.clock.elapsedTime, hovered) && this.xrSession) this.pulse(0.12, 18);
+    }
+
+    /** Speak a one-line fact as the ride closes in on each planet. */
+    announcePlanets() {
+        if (!this.planetAnnouncer) this.planetAnnouncer = new PlanetAnnouncer();
+        const ship = this.dolly.position;
+        const at = this._annVec || (this._annVec = new THREE.Vector3());
+        const bodies = [];
+        for (const key of Object.keys(this.planetAnnouncer.facts)) {
+            const body = BODIES.find(b => b.key === key);
+            if (!body || !this.system.bodies.has(key)) continue;
+            this.system.worldPos(key, at);
+            bodies.push({ key, radius: body.radius, distance: ship.distanceTo(at) });
+        }
+        const fact = this.planetAnnouncer.check(bodies, this.ride.time);
+        if (!fact) return;
+        if (this.cockpit) this.cockpit.setNarration(fact.text);
+        $('narration').textContent = fact.text;
+        // Queue behind any line already playing rather than cutting it off.
+        this.speak(fact.text, false);
     }
 
     /* ── QA helpers (window.__vr) ───────────────────────────────────── */
