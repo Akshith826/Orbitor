@@ -59,6 +59,16 @@ look** or **Phone VR (Cardboard)** split-screen.
 The verify scripts read `VR_TEST_URL` (default `http://localhost:5000`). To use an
 installed Chrome instead of Puppeteer's download, set `PUPPETEER_EXECUTABLE_PATH`.
 
+## Deploying to Vercel
+
+This repo is configured for zero-issue deployment on Vercel via `vercel.json`, `api/index.js`, and `scripts/build-vercel.cjs`:
+
+- `npm install --omit=dev` skips `puppeteer` and test devDependencies during Vercel installs.
+- `node scripts/build-vercel.cjs` prepares `dist/` (`public/`, `favicon.ico`, and `/lib/three/` including the patched `webxr.module.js`) so Vercel's CDN serves large textures and ES modules directly without hitting serverless payload limits.
+- `api/index.js` wraps the Express app from `server.js` for HTML routes and `/api/*` endpoints.
+
+Deploy with `vercel` or import the repository in the Vercel dashboard (no extra environment variables or build overrides required).
+
 ## Layout
 
 ```

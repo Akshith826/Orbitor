@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server.js",
     "start:https": "node server.js --https",
+    "build:vercel": "node scripts/build-vercel.cjs",
     "test": "vitest run",
     "verify:vr": "node scripts/verify-vr-modes.cjs",
     "verify:quest": "node scripts/verify-quest3-arcade.cjs"

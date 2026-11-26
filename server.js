@@ -6,11 +6,12 @@ const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
+const { buildPatchedThreeModule } = require('./lib/webxr-three');
 require('dotenv').config({ quiet: true });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
-const BEHIND_PROXY = process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true';
+const BEHIND_PROXY = process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true' || Boolean(process.env.VERCEL);
 if (BEHIND_PROXY) app.set('trust proxy', 1);
 
 app.use(compression());
@@ -55,7 +56,11 @@ const QUEST_GAMES = ['orbital-intercept', 'asteroid-dodge', 'lunar-landing', 'or
 app.get(QUEST_GAMES.map(slug => '/games/' + slug), view('vr-working.html'));
 app.get('/games/:slug', (req, res) => res.redirect('/games'));
 app.get('/quest-guide', view('quest-guide.html'));
-app.get('/favicon.ico', (req, res) => res.type('image/svg+xml').sendFile(path.join(__dirname, 'public', 'favicon.svg')));
+app.get('/favicon.ico', (req, res) => {
+    const iconPath = path.join(__dirname, 'public', 'favicon.svg');
+    if (fs.existsSync(iconPath)) return res.type('image/svg+xml').sendFile(iconPath);
+    return res.redirect(302, '/public/favicon.svg');
+});
 
 /* ── static assets ─────────────────────────────────────────────────── */
 const STATIC_CACHE = { maxAge: '7d', etag: true, lastModified: true };
@@ -66,11 +71,7 @@ app.use('/lib/three/addons', express.static(path.join(__dirname, 'node_modules',
 // the regular eye framebuffer (same patch the original app applies).
 let xrThreeModule;
 app.get('/lib/three/webxr.module.js', (req, res) => {
-    if (!xrThreeModule) {
-        const source = fs.readFileSync(path.join(__dirname, 'node_modules', 'three', 'build', 'three.module.js'), 'utf8');
-        const detection = "const supportsLayers = supportsGlBinding && 'createProjectionLayer' in XRWebGLBinding.prototype;";
-        xrThreeModule = source.replace(detection, "const supportsLayers = typeof XRWebGLLayer !== 'function' && supportsGlBinding && 'createProjectionLayer' in XRWebGLBinding.prototype;");
-    }
+    if (!xrThreeModule) xrThreeModule = buildPatchedThreeModule(__dirname);
     res.type('application/javascript').set('Cache-Control', 'public, max-age=604800').send(xrThreeModule);
 });
 app.use('/lib/three', express.static(path.join(__dirname, 'node_modules', 'three', 'build'), STATIC_CACHE));
