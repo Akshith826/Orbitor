@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#060b18">
+    <title>Orbitor · VR Space Ride &amp; Meta Quest 3 Games</title>
+    <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #060b18; --panel: rgba(255,255,255,.05); --line: rgba(255,255,255,.12); --text: #e8eefc; --muted: #9aa8c7; --accent: #64ffda; }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; font-family: Inter, system-ui, sans-serif; color: var(--text);
+            background: radial-gradient(1200px 600px at 20% -10%, #1b2a55 0%, transparent 60%),
+                        radial-gradient(900px 500px at 110% 10%, #3a1d4f 0%, transparent 55%), var(--bg); }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+        .brand { font-family: Orbitron, sans-serif; font-weight: 800; letter-spacing: .12em; color: var(--text); text-decoration: none; }
+        .brand span { color: var(--accent); }
+        header a.guide { color: var(--muted); text-decoration: none; font-weight: 600; }
+        header a.guide:hover { color: var(--text); }
+        main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 64px; }
+        h1 { font-family: Orbitron, sans-serif; font-size: clamp(26px, 4vw, 40px); margin: 0 0 8px; }
+        .lead { color: var(--muted); max-width: 720px; line-height: 1.6; margin: 0 0 28px; }
+        h2.section { font-family: Orbitron, sans-serif; font-size: 15px; letter-spacing: .16em; color: var(--muted); margin: 36px 0 14px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+        .card { --c: var(--accent); display: flex; flex-direction: column; gap: 8px; padding: 20px; border-radius: 18px; text-decoration: none; color: var(--text);
+            background: var(--panel); border: 1px solid var(--line); transition: transform .15s, border-color .15s, background .15s; }
+        .card:hover, .card:focus-visible { transform: translateY(-3px); border-color: var(--c); background: rgba(255,255,255,.08); outline: none; }
+        .card .icon { font-size: 30px; }
+        .card .tag { align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--c); border: 1px solid var(--c); border-radius: 999px; padding: 3px 9px; }
+        .card h3 { font-family: Orbitron, sans-serif; font-size: 16px; margin: 4px 0 0; letter-spacing: .04em; }
+        .card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; flex: 1; }
+        .card .go { font-weight: 700; color: var(--c); font-size: 13px; letter-spacing: .08em; }
+        .card .best { color: var(--muted); font-size: 12px; }
+        .feature { grid-column: 1 / -1; }
+        @media (min-width: 720px) { .feature { grid-column: span 2; } }
+        .note { margin-top: 32px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); line-height: 1.6; font-size: 14px; }
+        .note code { color: var(--text); }
+    </style>
+</head>
+<body>
+    <header>
+        <a class="brand" href="/">ORBI<span>TOR</span></a>
+        <a class="guide" href="/quest-guide">Meta Quest guide →</a>
+    </header>
+    <main>
+        <h1>VR Space Ride &amp; Meta Quest 3 Games</h1>
+        <p class="lead">Strap into the Deep Space Ride, fly the solar system, or play seven Meta Quest 3 exclusive VR games built for dual Touch Plus controllers. Everything also runs on a normal screen (mouse + keyboard) and on a phone (gyro look or Cardboard split-screen).</p>
+
+        <h2 class="section">VR SPACE RIDE</h2>
+        <div class="grid">
+            <a class="card feature" href="/vr-ride" style="--c:#ff8ba7">
+                <span class="icon">🎢</span>
+                <span class="tag">RIDE · 3 MIN</span>
+                <h3>VR Deep Space Ride</h3>
+                <p>A rail-guided plunge from the pilot seat: solar slingshot, asteroid gauntlet, Jupiter barrel roll, a shot through Saturn's rings, turret hazards and jumpscares. Comfort mode and intensity controls included.</p>
+                <span class="go">START RIDE →</span>
+            </a>
+            <a class="card" href="/vr-solar-system" style="--c:#7aa2ff">
+                <span class="icon">🌌</span>
+                <span class="tag">FREE FLIGHT</span>
+                <h3>VR Solar System</h3>
+                <p>Fly anywhere among twelve textured worlds and their moons, or take the 90-second Scan Hunt.</p>
+                <span class="go">FLY →</span>
+            </a>
+        </div>
+
+        <h2 class="section">META QUEST 3 GAMES</h2>
+        <div class="grid">
+            <a class="card" href="/games/orbital-intercept" style="--c:#64ffda" data-slug="orbital-intercept">
+                <span class="icon">🛡️</span><span class="tag">QUEST 3</span>
+                <h3>Orbital Intercept</h3>
+                <p>Dual-wield combat in Earth orbit. Deflect plasma bolts with your Aegis Shield and shatter rogue drones with your Twin Plasma Blaster.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+            <a class="card" href="/games/asteroid-dodge" style="--c:#ffb46b" data-slug="asteroid-dodge">
+                <span class="icon">☄️</span><span class="tag">QUEST 3</span>
+                <h3>Asteroid Dodge</h3>
+                <p>Bank through a Saturn-ring trench with stick or head lean. Fire your Pulse Blaster at crystals and trigger your Phase Shield.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+            <a class="card" href="/games/lunar-landing" style="--c:#cfe1ff" data-slug="lunar-landing">
+                <span class="icon">🌕</span><span class="tag">QUEST 3</span>
+                <h3>Lunar Landing</h3>
+                <p>Pilot an open-canopy lander onto PAD 01. Feather the retro engine with the right trigger and hold a precise hover over craters.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+            <a class="card" href="/games/orbital-docking" style="--c:#80e8ff" data-slug="orbital-docking">
+                <span class="icon">🛰️</span><span class="tag">QUEST 3</span>
+                <h3>Orbital Docking</h3>
+                <p>Thread the ISS docking corridor with both sticks. Match roll, bleed closing velocity, and lock onto the collar.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+            <a class="card" href="/games/satellite-repair" style="--c:#ffd196" data-slug="satellite-repair">
+                <span class="icon">🔧</span><span class="tag">QUEST 3</span>
+                <h3>Satellite Repair</h3>
+                <p>Unbolt faulty bays with your Plasma Multi-Tool, grapple spares with your left claw, and weld them online.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+            <a class="card" href="/games/mars-rover" style="--c:#ffb281" data-slug="mars-rover">
+                <span class="icon">🪨</span><span class="tag">QUEST 3</span>
+                <h3>Mars Rover Expedition</h3>
+                <p>Drive Jezero canyon with analog trigger throttle, harvest solar crystals, dodge boulders, and drill three core samples.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+            <a class="card" href="/games/space-rescue" style="--c:#8ff2d9" data-slug="space-rescue">
+                <span class="icon">🧑‍🚀</span><span class="tag">QUEST 3</span>
+                <h3>Space Rescue</h3>
+                <p>Match velocity with a tumbling astronaut, lock your electromagnetic tether harpoon, and reel them home.</p>
+                <span class="best"></span><span class="go">LAUNCH VR →</span>
+            </a>
+        </div>
+
+        <div class="note">
+            <strong>Playing on a Meta Quest 3:</strong> headset VR needs a secure origin. Start the server with
+            <code>npm run start:https</code>, then open the printed <code>https://&lt;your-LAN-IP&gt;:5000</code> address in the
+            Quest Browser and accept the certificate warning. See the <a href="/quest-guide" style="color:var(--accent)">Meta Quest guide</a> for controls.
+        </div>
+    </main>
+    <script>
+        // Personal bests are kept by each game in this browser's localStorage.
+        document.querySelectorAll('[data-slug]').forEach(function (card) {
+            var best = 0;
+            try { best = Number(localStorage.getItem('spaceverse.arcade.' + card.dataset.slug + '.best') || 0); } catch (e) {}
+            if (best > 0) card.querySelector('.best').textContent = 'Personal best: ' + best.toLocaleString();
+        });
+    </script>
+</body>
+</html>
