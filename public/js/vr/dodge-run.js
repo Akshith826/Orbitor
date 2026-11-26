@@ -124,9 +124,9 @@ export class DodgeRun {
 
     update(dt, steering = 0) {
         if (!Number.isFinite(dt) || dt <= 0 || !['playing', 'countdown'].includes(this.state)) return;
-        this.events = [];
+        // Events are cleared by the host after it plays them (see DodgeGame.update).
         dt = Math.min(dt, 0.1);
-        this.x += (clamp(Number.isFinite(steering) ? steering : 0, -1, 1) * 3.2 - this.x) * (1 - Math.exp(-dt * 8));
+        this.x += (clamp(Number.isFinite(steering) ? steering : 0, -1, 1) * 3.2 - this.x) * (1 - Math.exp(-dt * 6.5));
         if (this.state === 'countdown') {
             this.countdown = Math.max(0, this.countdown - dt);
             if (this.countdown <= 0.00001) {

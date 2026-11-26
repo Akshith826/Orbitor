@@ -63,6 +63,42 @@ function wrap(ctx, text, maxW) {
     return lines;
 }
 
+/** A plane bent around the viewer (concentric with the panel ring), so cards wrap gently. */
+function bentPlane(w, h, bendRadius, segments = 24) {
+    const geo = new THREE.PlaneGeometry(w, h, segments, 1);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        const a = pos.getX(i) / bendRadius;
+        pos.setX(i, Math.sin(a) * bendRadius);
+        pos.setZ(i, (1 - Math.cos(a)) * bendRadius);
+    }
+    geo.computeVertexNormals();
+    return geo;
+}
+
+/** White rounded rectangle with a wide blurred falloff: tinted for hover glow or shadow. */
+const softCache = new Map();
+function softRoundedTexture(aspect) {
+    const key = aspect.toFixed(2);
+    if (softCache.has(key)) return softCache.get(key);
+    const W = 512, H = Math.round(W / aspect);
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const pad = Math.round(H * 0.16);
+    // Draw the shape off-canvas and keep only its blurred shadow: a smooth
+    // falloff in every browser (canvas filter support is not universal).
+    x.shadowColor = '#ffffff';
+    x.shadowBlur = pad * 0.9;
+    x.shadowOffsetX = W * 4;
+    x.fillStyle = '#ffffff';
+    roundRect(x, pad - W * 4, pad, W - pad * 2, H - pad * 2, Math.round(H * 0.12));
+    x.fill();
+    const tex = new THREE.CanvasTexture(c);
+    softCache.set(key, tex);
+    return tex;
+}
+
 function canvasTexture(c, renderer) {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -80,13 +116,20 @@ function panelTexture(exp, w, h, renderer) {
     const bg = x.createLinearGradient(0, 0, W, H);
     bg.addColorStop(0, 'rgba(14,24,46,0.96)');
     bg.addColorStop(1, 'rgba(6,11,24,0.96)');
-    roundRect(x, 6, 6, W - 12, H - 12, 48);
+    const corner = Math.round(H * 0.13);
+    roundRect(x, 4, 4, W - 8, H - 8, corner);
     x.fillStyle = bg; x.fill();
-    const glow = x.createRadialGradient(W * 0.85, 0, 0, W * 0.85, 0, W * 0.7);
-    glow.addColorStop(0, exp.accent + '55');
+    // A faint wash of the accent from one corner, like light on frosted glass.
+    const glow = x.createRadialGradient(W * 0.9, 0, 0, W * 0.9, 0, W * 0.75);
+    glow.addColorStop(0, exp.accent + '2a');
     glow.addColorStop(1, exp.accent + '00');
     x.fillStyle = glow; x.fill();
-    x.lineWidth = 6; x.strokeStyle = exp.accent + 'aa'; x.stroke();
+    // Top sheen.
+    const sheen = x.createLinearGradient(0, 0, 0, H * 0.45);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.07)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = sheen; x.fill();
+    x.lineWidth = 3; x.strokeStyle = exp.accent + '80'; x.stroke();
 
     x.textBaseline = 'top';
     x.font = `${Math.round(H * 0.17)}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
@@ -230,16 +273,22 @@ export class LobbyScene {
     buildSpace() {
         const g = this.group;
         const loader = new THREE.TextureLoader();
-        const tex = url => {
-            const t = loader.load(url);
+        // Light 2K lobby copies (the full-size maps are for close-up flight).
+        // A material passed in shows its base colour at once and takes the
+        // texture when it lands, so Earth never pops in late.
+        const tex = (url, material) => {
+            const t = loader.load(url, () => {
+                if (material) { material.map = t; material.color.set(0xffffff); material.needsUpdate = true; }
+            });
             t.colorSpace = THREE.SRGBColorSpace;
-            return t;
+            t.anisotropy = 4;
+            return material ? null : t;
         };
 
         // Faint Milky Way backdrop; the point stars on top carry the detail.
         const sky = new THREE.Mesh(
             new THREE.SphereGeometry(900, 48, 32),
-            new THREE.MeshBasicMaterial({ map: tex('/public/textures/star-map.jpg'), side: THREE.BackSide, color: 0x3a4258, toneMapped: false, depthWrite: false })
+            new THREE.MeshBasicMaterial({ map: tex('/public/textures/lobby/star-map-2k.jpg'), side: THREE.BackSide, color: 0x3a4258, toneMapped: false, depthWrite: false })
         );
         sky.rotation.z = 0.5;
         this.sky = sky;
@@ -266,14 +315,13 @@ export class LobbyScene {
         this.earth = new THREE.Group();
         this.earth.position.set(0, -44, -52);
         this.earth.rotation.z = 0.35;
-        this.earthBody = new THREE.Mesh(
-            new THREE.SphereGeometry(34, 96, 64),
-            new THREE.MeshStandardMaterial({ map: tex('/public/textures/earth.jpg'), roughness: 0.9, metalness: 0 })
-        );
-        this.clouds = new THREE.Mesh(
-            new THREE.SphereGeometry(34.3, 96, 64),
-            new THREE.MeshStandardMaterial({ map: tex('/public/textures/earth-clouds.png'), transparent: true, opacity: 0.8, depthWrite: false })
-        );
+        const earthMat = new THREE.MeshStandardMaterial({ color: 0x1f4f8f, roughness: 0.9, metalness: 0 });
+        tex('/public/textures/lobby/earth-2k.jpg', earthMat);
+        this.earthBody = new THREE.Mesh(new THREE.SphereGeometry(34, 96, 64), earthMat);
+        const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+        const cloudTex = loader.load('/public/textures/earth-clouds.png', () => { cloudMat.map = cloudTex; cloudMat.opacity = 0.8; cloudMat.needsUpdate = true; });
+        cloudTex.colorSpace = THREE.SRGBColorSpace;
+        this.clouds = new THREE.Mesh(new THREE.SphereGeometry(34.3, 96, 64), cloudMat);
         const atmosphere = new THREE.Mesh(
             new THREE.SphereGeometry(36, 64, 48),
             new THREE.ShaderMaterial({
@@ -285,10 +333,9 @@ export class LobbyScene {
         this.earth.add(this.earthBody, this.clouds, atmosphere);
         g.add(this.earth);
 
-        const moon = new THREE.Mesh(
-            new THREE.SphereGeometry(3.2, 48, 32),
-            new THREE.MeshStandardMaterial({ map: tex('/public/textures/moon.jpg'), roughness: 1 })
-        );
+        const moonMat = new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 1 });
+        tex('/public/textures/lobby/moon-1k.jpg', moonMat);
+        const moon = new THREE.Mesh(new THREE.SphereGeometry(3.2, 48, 32), moonMat);
         moon.position.set(48, 22, -120);
         g.add(moon);
 
@@ -342,18 +389,26 @@ export class LobbyScene {
                 group.position.set(Math.sin(angle) * RADIUS, row.y, -Math.cos(angle) * RADIUS);
                 group.lookAt(0, row.y, 0);
                 const mesh = new THREE.Mesh(
-                    new THREE.PlaneGeometry(row.w, row.h),
-                    new THREE.MeshBasicMaterial({ map: panelTexture(exp, row.w, row.h, r), transparent: true })
+                    bentPlane(row.w, row.h, RADIUS),
+                    new THREE.MeshBasicMaterial({ map: panelTexture(exp, row.w, row.h, r), transparent: true, toneMapped: false })
                 );
                 mesh.userData.exp = exp;
-                const halo = new THREE.Mesh(
-                    new THREE.PlaneGeometry(row.w * 1.08, row.h * 1.12),
-                    new THREE.MeshBasicMaterial({ color: new THREE.Color(exp.accent), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })
+                const soft = softRoundedTexture(row.w / row.h);
+                // Soft accent light spilling around the card on hover (follows its rounded shape).
+                const glow = new THREE.Mesh(
+                    bentPlane(row.w * 1.3, row.h * 1.42, RADIUS),
+                    new THREE.MeshBasicMaterial({ map: soft, color: new THREE.Color(exp.accent), transparent: true, opacity: 0, depthWrite: false, toneMapped: false })
                 );
-                halo.position.z = -0.01;
-                group.add(halo, mesh);
+                glow.position.z = -0.03;
+                // Faint shadow below and behind, so cards read as objects in space.
+                const shadow = new THREE.Mesh(
+                    bentPlane(row.w * 1.22, row.h * 1.34, RADIUS),
+                    new THREE.MeshBasicMaterial({ map: soft, color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false })
+                );
+                shadow.position.set(0.01, -0.035, -0.06);
+                group.add(shadow, glow, mesh);
                 this.group.add(group);
-                this.panels.push({ exp, group, mesh, halo, baseY: row.y, phase: Math.random() * Math.PI * 2, hover: 0, flash: 0 });
+                this.panels.push({ exp, group, mesh, glow, baseY: row.y, phase: Math.random() * Math.PI * 2, hover: 0, flash: 0 });
             });
         }
         this.hitTargets = this.panels.map(p => p.mesh);
@@ -406,9 +461,12 @@ export class LobbyScene {
             if (target && p.hover < 0.05) newlyHovered = true;
             p.hover += (target - p.hover) * Math.min(1, dt * 12);
             p.flash = Math.max(0, p.flash - dt * 3);
-            p.group.scale.setScalar(1 + p.hover * 0.07 + p.flash * 0.08);
+            // Hover: the card eases toward you and its light comes up softly.
+            p.group.scale.setScalar(1 + p.hover * 0.035 + p.flash * 0.05);
+            p.mesh.position.z = p.hover * 0.06;
+            p.glow.position.z = -0.03 + p.hover * 0.05;
             p.group.position.y = p.baseY + Math.sin(t * 0.9 + p.phase) * 0.012;
-            p.halo.material.opacity = 0.05 + p.hover * 0.38 + p.flash * 0.5;
+            p.glow.material.opacity = p.hover * 0.42 + p.flash * 0.45;
         }
         return newlyHovered;
     }

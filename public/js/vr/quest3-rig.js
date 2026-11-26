@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { createGlowTexture, createHexShieldTexture, safeCanvas } from './quest-assets.js?v=20261125-q3';
+import { createGlowTexture, createHexShieldTexture, safeCanvas, roundRectPath } from './quest-assets.js?v=20261127-o1';
 
 const HANDED_DEFAULT = ['left', 'right'];
 
@@ -261,19 +261,30 @@ function buildWristHUD() {
     mesh.visible = false;
 
     let lastKey = '';
+    let lastTitle = '';
+    let lastAt = -Infinity;
     const update = (title = '', status = '', hint = '') => {
         if (!surface || !tex) return;
         const key = `${title}|${status}|${hint}`;
         if (key === lastKey) return;
+        // Cap texture re-uploads at ~8 Hz while only the numbers change.
+        const t = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (title === lastTitle && t - lastAt < 120) return;
         lastKey = key;
+        lastTitle = title;
+        lastAt = t;
         const { ctx, canvas } = surface;
         const w = canvas.width, h = canvas.height;
         ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = 'rgba(6, 14, 28, 0.92)';
-        ctx.fillRect(3, 3, w - 6, h - 6);
-        ctx.strokeStyle = '#64ffda';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
+        roundRectPath(ctx, 3, 3, w - 6, h - 6, 30);
+        const bg = ctx.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, 'rgba(14, 26, 48, 0.94)');
+        bg.addColorStop(1, 'rgba(5, 11, 22, 0.94)');
+        ctx.fillStyle = bg;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(100, 255, 218, 0.55)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
 
         ctx.fillStyle = '#64ffda';
         ctx.font = 'bold 28px Inter, system-ui, sans-serif';

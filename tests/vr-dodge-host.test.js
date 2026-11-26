@@ -27,7 +27,9 @@ beforeAll(async () => {
         }
         return nodes.get(id);
     }, hasFocus: () => true, body: { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } }, createElement: () => ({
-        getContext: () => ({ scale() {}, fillRect() {}, strokeRect() {}, fillText() {}, measureText: () => ({ width: 100 }) })
+        getContext: () => ({ scale() {}, fillRect() {}, strokeRect() {}, fillText() {}, measureText: () => ({ width: 100 }),
+            beginPath() {}, moveTo() {}, arcTo() {}, closePath() {}, fill() {}, stroke() {},
+            createLinearGradient: () => ({ addColorStop() {} }) })
     }) };
     location = { pathname: '/games/asteroid-dodge', search: '' };
     navigatorStub = { userAgent: '', maxTouchPoints: 0 };
@@ -312,7 +314,11 @@ describe('space operations input', () => {
         app.onControllerSelect(controller);
         expect(app.flightGame.run.state).toBe('playing');
         expect(app.flightGame.run.burn).toBeGreaterThan(0);
-        expect(app.arcadeInput()).toEqual({ x: 0.45, y: 0.6 });
+        // Up on the stick maps to +y, direction is kept, and a partial tilt is softened by the response curve.
+        const stick = app.arcadeInput();
+        expect(stick.x / stick.y).toBeCloseTo(0.45 / 0.6, 5);
+        expect(stick.y).toBeGreaterThan(0);
+        expect(Math.hypot(stick.x, stick.y)).toBeLessThan(Math.hypot(0.45, 0.6));
     });
 });
 

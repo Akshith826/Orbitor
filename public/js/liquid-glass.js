@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   SPACEVERSE — LIQUID GLASS RUNTIME
+   ORBITOR — LIQUID GLASS RUNTIME
    ═══════════════════════════════════════════════════════════════════════
    Everything the glass needs to feel physical rather than painted:
    pointer-tracked speculars, a parallax aurora behind the blur, ripples,

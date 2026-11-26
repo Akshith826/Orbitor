@@ -641,7 +641,7 @@ export class Cockpit {
         this.worldToCabin.copy(this.group.matrixWorld).invert();
 
         this._redrawT += dt;
-        if (this._redrawT > 1 / 15) { this._redrawT = 0; this.redraw(); }
+        if (this._redrawT > 1 / 10) { this._redrawT = 0; this.redraw(); }
     }
 
     /* ── drawing ────────────────────────────────────────────────────── */
@@ -744,7 +744,7 @@ export class Cockpit {
             label(x, d.paused ? '⏸  HOLDING — tap or Space to resume' : '●  ALL SYSTEMS NOMINAL', w / 2, 430, 22, d.paused ? C.amber : C.accent, 'bold', 'center');
         }
         // footer
-        label(x, 'SPACEVERSE FLIGHT SYSTEMS  ·  MFD-1', 36, 490, 13, C.muted2, '600');
+        label(x, 'ORBITOR FLIGHT SYSTEMS  ·  MFD-1', 36, 490, 13, C.muted2, '600');
         label(x, d.comfort ? 'COMFORT' : 'FULL MOTION', w - 36, 490, 13, C.muted2, '600', 'right');
         this.main.tex.needsUpdate = true;
     }

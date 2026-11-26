@@ -846,7 +846,7 @@ body.lg-lite > canvas#starfield {
     width: 35px;
     height: 35px;
     flex: none;
-    background: url('/public/images/brand/spaceverse-mark-small.svg') center / contain no-repeat;
+    background: url('/public/favicon.svg') center / contain no-repeat;
 }
 
 .logo-icon .logo-planet,

@@ -1,4 +1,4 @@
-// Orbitor — standalone server for the SpaceVerse VR Deep Space Ride and the
+// Orbitor — standalone server for the VR Deep Space Ride and the
 // seven Meta Quest 3 VR arcade games (plus the VR Solar System they share a
 // renderer with). No database, no accounts: everything runs from static files.
 const express = require('express');

@@ -1,6 +1,6 @@
 // Mission scoring for the VR Solar System's Scan Hunt. The browser reports the
 // facts of a finished run and the server computes the score, using the same
-// rule as the original SpaceVerse app. Orbitor has no accounts or database, so
+// rule the Scan Hunt has always used. Orbitor has no accounts or database, so
 // runs are scored but not stored (`persisted: false`, `progression: null`).
 const express = require('express');
 const router = express.Router();

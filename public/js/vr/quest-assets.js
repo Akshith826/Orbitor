@@ -22,6 +22,18 @@ export function safeCanvas(w, h) {
     }
 }
 
+/** Rounded-rectangle path on a 2D canvas context (shared by every in-game screen). */
+export function roundRectPath(ctx, x, y, w, h, r) {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+}
+
 function makeCanvasTex(key, w, h, draw, { srgb = true, repeat = false } = {}) {
     if (texCache.has(key)) return texCache.get(key);
     const surface = safeCanvas(w, h);
@@ -734,7 +746,7 @@ export function buildMissionCabin({ style = 'capsule', accent = '#64ffda', envMa
     stickPivot.add(stBeacon);
 
     // Central Multi-Function Display (MFD) canvas screen
-    const mfdSurface = safeCanvas(512, 256);
+    const mfdSurface = safeCanvas(768, 384);
     const mfdTex = mfdSurface ? new THREE.CanvasTexture(mfdSurface.canvas) : null;
     if (mfdTex) {
         mfdTex.colorSpace = THREE.SRGBColorSpace;
@@ -743,46 +755,87 @@ export function buildMissionCabin({ style = 'capsule', accent = '#64ffda', envMa
     }
     const mfd = new THREE.Mesh(
         new THREE.PlaneGeometry(0.78, 0.36),
-        new THREE.MeshBasicMaterial({ map: mfdTex, color: mfdTex ? 0xffffff : 0x091628, toneMapped: false })
+        new THREE.MeshBasicMaterial({ map: mfdTex, color: mfdTex ? 0xffffff : 0x091628, toneMapped: false, transparent: Boolean(mfdTex) })
     );
     mfd.position.set(0, -0.82, dashZ + 0.265);
     mfd.rotation.x = -0.38;
     group.add(mfd);
 
     let lastMfdKey = '';
+    let lastMfdHead = '';
+    let lastMfdAt = -Infinity;
+    const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const drawMFD = (header, lines = [], barLabel = '', barRatio = 0, warn = false) => {
         if (!mfdSurface || !mfdTex) return;
         const key = `${header}|${lines.join(';')}|${barLabel}|${Math.round(barRatio * 50)}|${warn}`;
         if (key === lastMfdKey) return;
+        // Redrawing a canvas re-uploads a texture to the GPU. Numbers tick every
+        // frame, so cap routine updates at ~8 Hz; a new header or warning draws now.
+        const head = `${header}|${warn}`;
+        const t = now();
+        if (head === lastMfdHead && t - lastMfdAt < 120) return;
         lastMfdKey = key;
+        lastMfdHead = head;
+        lastMfdAt = t;
         const { ctx, canvas } = mfdSurface;
         const w = canvas.width, h = canvas.height;
-        ctx.fillStyle = '#060e1c';
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = warn ? '#fb7185' : accent;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(4, 4, w - 8, h - 8);
+        const edge = warn ? '#fb7185' : accent;
+        ctx.clearRect(0, 0, w, h);
 
-        ctx.fillStyle = warn ? '#fda4af' : accent;
-        ctx.font = 'bold 26px Inter, system-ui, sans-serif';
+        // Glass panel: rounded, softly lit from the top, thin accent bezel.
+        roundRectPath(ctx, 4, 4, w - 8, h - 8, 34);
+        const bg = ctx.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, '#0d1a30');
+        bg.addColorStop(1, '#050b16');
+        ctx.fillStyle = bg;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = warn ? 'rgba(251,113,133,0.9)' : 'rgba(255,255,255,0.16)';
+        ctx.stroke();
+
+        // Header strip with a status dot.
+        ctx.save();
+        roundRectPath(ctx, 4, 4, w - 8, h - 8, 34);
+        ctx.clip();
+        ctx.fillStyle = warn ? 'rgba(251,113,133,0.18)' : 'rgba(255,255,255,0.05)';
+        ctx.fillRect(0, 0, w, 70);
+        ctx.restore();
+        ctx.fillStyle = edge;
+        ctx.beginPath();
+        ctx.arc(40, 38, 8, 0, Math.PI * 2);
+        ctx.fill();
         ctx.textAlign = 'left';
-        ctx.fillText(header, 22, 38);
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = warn ? '#fecdd3' : '#eaf3ff';
+        ctx.font = '700 30px Inter, system-ui, sans-serif';
+        ctx.fillText(header, 62, 39, w - 90);
 
-        ctx.fillStyle = '#dbeafe';
-        ctx.font = '22px Inter, system-ui, sans-serif';
+        // Readouts.
+        ctx.fillStyle = '#c9d8ee';
+        ctx.font = '500 29px Inter, system-ui, sans-serif';
         lines.slice(0, 3).forEach((ln, idx) => {
-            ctx.fillText(ln, 22, 82 + idx * 36, w - 44);
+            ctx.fillText(ln, 34, 112 + idx * 50, w - 68);
         });
 
         if (barLabel) {
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 18px Inter, system-ui, sans-serif';
-            ctx.fillText(barLabel, 22, h - 46);
-            ctx.fillStyle = 'rgba(255,255,255,0.12)';
-            ctx.fillRect(22, h - 34, w - 44, 16);
-            ctx.fillStyle = warn ? '#fb7185' : accent;
-            ctx.fillRect(22, h - 34, (w - 44) * Math.max(0, Math.min(1, barRatio)), 16);
+            ctx.fillStyle = '#8fa3c0';
+            ctx.font = '600 22px Inter, system-ui, sans-serif';
+            ctx.fillText(barLabel, 34, h - 66, w - 68);
+            const bx = 34, by = h - 44, bw = w - 68, bh = 16;
+            roundRectPath(ctx, bx, by, bw, bh, 8);
+            ctx.fillStyle = 'rgba(255,255,255,0.10)';
+            ctx.fill();
+            const fill = Math.max(0, Math.min(1, barRatio)) * bw;
+            if (fill > 1) {
+                roundRectPath(ctx, bx, by, Math.max(bh, fill), bh, 8);
+                const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+                g.addColorStop(0, edge);
+                g.addColorStop(1, warn ? '#fda4af' : '#e6fffa');
+                ctx.fillStyle = g;
+                ctx.fill();
+            }
         }
+        ctx.textBaseline = 'alphabetic';
         mfdTex.needsUpdate = true;
     };
 

@@ -253,8 +253,8 @@ export class InterceptRun {
                 this.score += 200;
                 this.empCharge = Math.min(100, this.empCharge + 22);
                 this.emit('shield-block', { x: shot.x, y: shot.y, z: shot.z });
-                // Deflected plasma bolt snaps back at the nearest active target!
-                const nearest = this.targets.find(t => t.hp > 0);
+                // Deflected plasma bolt snaps back at the closest threat it can damage.
+                const nearest = this._nearestDamageable();
                 if (nearest) {
                     this._damageTarget(nearest, 3, true);
                     this.playerShots.push({
@@ -278,6 +278,17 @@ export class InterceptRun {
         return deflected;
     }
 
+    /** The live target closest to the platform, skipping a boss whose pylons still shield it. */
+    _nearestDamageable() {
+        let best = null;
+        for (const t of this.targets) {
+            if (t.hp <= 0) continue;
+            if (t.kind === 'boss' && this.targets.some(p => p.kind === 'pylon' && p.parentId === t.id && p.hp > 0)) continue;
+            if (!best || t.z > best.z) best = t;
+        }
+        return best;
+    }
+
     triggerEMP() {
         if (this.state !== 'playing' || this.empCharge < 100) return false;
         const clearedShots = this.enemyShots.length;
@@ -295,7 +306,8 @@ export class InterceptRun {
     update(dt, input = {}) {
         if (!Number.isFinite(dt) || dt <= 0) return;
         dt = Math.min(dt, 0.05);
-        this.events = [];
+        // Events are cleared by the host after it plays them, so shots, shield
+        // blocks and EMPs fired earlier in the same frame are not lost.
 
         if (this.state === 'countdown') {
             const prevSec = Math.ceil(this.countdown);
@@ -316,7 +328,7 @@ export class InterceptRun {
 
         // Strafe platform with Left Stick X
         const stickX = Number.isFinite(input.x) ? clamp(input.x, -1, 1) : 0;
-        this.vx += (stickX * 4.5 - this.vx) * (1 - Math.exp(-dt * 10));
+        this.vx += (stickX * 3.8 - this.vx) * (1 - Math.exp(-dt * 7));
         this.x = clamp(this.x + this.vx * dt, -3.5, 3.5);
 
         // Charge rail-lance if Right Grip held

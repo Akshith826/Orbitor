@@ -17,26 +17,26 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SolarSystem, BODIES } from './solar-system.js?v=20261022-5';
+import { SolarSystem, BODIES } from './solar-system.js?v=20261127-o1';
 import { SpaceAudio } from './audio.js';
-import { ScareDirector } from './scares.js?v=20261022-5';
+import { ScareDirector } from './scares.js?v=20261127-o1';
 import { Ride } from './ride.js';
-import { GyroLook } from './gyro.js?v=20261011-1';
-import { Cockpit } from './cockpit.js?v=20261015-4';
-import { RemoteInput } from './remote-input.js?v=20261013-1';
-import { DwellSelector, GazeControls } from './gaze-controls.js?v=20261015-3';
-import { ScreenAwake } from './screen-awake.js?v=20261014-2';
-import { PhoneStereoEffect, PHONE_UI_LAYER, setPhoneUILayer, phoneLensMask } from './phone-stereo.js?v=20261015-1';
-import { DodgeGame } from './dodge-game.js?v=20261125-clear-view';
-import { ArcadeFlight } from './arcade-flight.js?v=20261125-clear-view';
-import { InterceptGame } from './intercept-game.js?v=20261125-clear-view';
-import { VR_GAMES, VR_ARCADE_META } from './arcade-run.js?v=20261125-q3';
-import { Quest3Rig } from './quest3-rig.js?v=20261125-q3';
-import { immersiveVRStatus, questOnlyVRStatus, readThumbstick, readQuestControllers, pulseQuestController, setRayFromObject } from './xr-support.js?v=20261125-xr1';
-import { guardXRFrames } from './xr-frame-guard.js?v=20261125-xr1';
-import { setupAutoVR, navigateInVR, XR_SESSION_INIT } from './auto-vr.js?v=20261126-2';
-import { LobbyScene } from '../lobby/lobby-scene.js?v=20261126-3';
-import { PlanetAnnouncer } from './planet-announcer.js?v=20261126-3';
+import { GyroLook } from './gyro.js?v=20261127-o1';
+import { Cockpit } from './cockpit.js?v=20261127-o1';
+import { RemoteInput } from './remote-input.js?v=20261127-o1';
+import { DwellSelector, GazeControls } from './gaze-controls.js?v=20261127-o1';
+import { ScreenAwake } from './screen-awake.js?v=20261127-o1';
+import { PhoneStereoEffect, PHONE_UI_LAYER, setPhoneUILayer, phoneLensMask } from './phone-stereo.js?v=20261127-o1';
+import { DodgeGame } from './dodge-game.js?v=20261127-o1';
+import { ArcadeFlight } from './arcade-flight.js?v=20261127-o1';
+import { InterceptGame } from './intercept-game.js?v=20261127-o1';
+import { VR_GAMES, VR_ARCADE_META } from './arcade-run.js?v=20261127-o1';
+import { Quest3Rig } from './quest3-rig.js?v=20261127-o1';
+import { immersiveVRStatus, questOnlyVRStatus, readThumbstick, readQuestControllers, smoothQuestSticks, pulseQuestController, setRayFromObject } from './xr-support.js?v=20261127-o1';
+import { guardXRFrames } from './xr-frame-guard.js?v=20261127-o1';
+import { setupAutoVR, navigateInVR, XR_SESSION_INIT } from './auto-vr.js?v=20261127-o1';
+import { LobbyScene } from '../lobby/lobby-scene.js?v=20261127-o1';
+import { PlanetAnnouncer } from './planet-announcer.js?v=20261127-o1';
 import MissionCore from '../game/core.js';
 import { createScanHunt } from '../game/missions/scan-hunt.js';
 
@@ -67,7 +67,7 @@ class VRApp {
         this.voiceOn = true;
         this.baseFov = 62;
         this.hudDirty = true;
-        this.hudText = { title: 'SPACEVERSE', sub: 'Solar system', warn: '' };
+        this.hudText = { title: 'ORBITOR', sub: 'Solar system', warn: '' };
         this.presentedMissionResults = new WeakSet();
 
         this.activeBodyKey = 'earth';
@@ -489,6 +489,7 @@ class VRApp {
     /* ── camera helpers ─────────────────────────────────────────────── */
 
     placeAtEarth() {
+        this._flyVel?.set(0, 0, 0);
         const p = this.system.worldPos('earth', new THREE.Vector3());
         this.dolly.position.set(p.x + 26, p.y + 9, p.z + 26);
         const dir = p.clone().sub(this.dolly.position).normalize();
@@ -517,7 +518,7 @@ class VRApp {
         const meta = this.arcadeMeta;
         const name = this.arcadeName;
         const summary = meta?.description || this.arcadeMission?.description || 'Bank through an asteroid trench with Meta Quest 3 Touch Plus controllers.';
-        document.title = name + ' — Meta Quest 3 · SpaceVerse';
+        document.title = name + ' — Meta Quest 3 · Orbitor';
 
         if ($('arcade-title')) $('arcade-title').textContent = name;
         if ($('arcade-kicker')) $('arcade-kicker').textContent = meta?.kicker || 'META QUEST 3 EXCLUSIVE';
@@ -1011,7 +1012,7 @@ class VRApp {
             // The cockpit and Quest 3 arcade courses use a seated eye-level origin.
             this.renderer.xr.setReferenceSpaceType('local');
             this.renderer.xr.setFramebufferScaleFactor(0.85);
-            this.renderer.xr.setFoveation?.(0.65);
+            this.renderer.xr.setFoveation?.(0.8);
             this.xrAttaching = session;
             try {
                 await this.renderer.xr.setSession(session);
@@ -1154,10 +1155,22 @@ class VRApp {
             c.width = 1024; c.height = 512;
             const x = c.getContext('2d');
             x.scale(2, 2);
-            x.fillStyle = 'rgba(8,15,28,0.92)';
-            x.fillRect(0, 0, 512, 256);
-            x.strokeStyle = accent; x.lineWidth = 6;
-            x.strokeRect(3, 3, 506, 250);
+            // Rounded glass card with a soft top highlight and a thin accent rim.
+            const r = 38;
+            x.beginPath();
+            x.moveTo(4 + r, 4);
+            x.arcTo(508, 4, 508, 252, r);
+            x.arcTo(508, 252, 4, 252, r);
+            x.arcTo(4, 252, 4, 4, r);
+            x.arcTo(4, 4, 508, 4, r);
+            x.closePath();
+            const bg = x.createLinearGradient(0, 0, 0, 256);
+            bg.addColorStop(0, 'rgba(18,30,54,0.95)');
+            bg.addColorStop(1, 'rgba(6,12,24,0.95)');
+            x.fillStyle = bg;
+            x.fill();
+            x.strokeStyle = accent; x.lineWidth = 3.5;
+            x.stroke();
             x.textAlign = 'center';
             x.fillStyle = accent;
             let size = 44;
@@ -1857,7 +1870,7 @@ class VRApp {
         $('mode-menu').classList.add('show');
         $('ride-hud').classList.remove('show');
         $('explore-hud').classList.remove('show');
-        this.setHud('SPACEVERSE', this.entry === 'dodge' ? this.arcadeName + ' — ready' : this.entry === 'ride' ? 'Deep Space Ride — ready' : 'Free flight — ready');
+        this.setHud('ORBITOR', this.entry === 'dodge' ? this.arcadeName + ' — ready' : this.entry === 'ride' ? 'Deep Space Ride — ready' : 'Free flight — ready');
         this.audio.setPad(0.0);
         this.audio.setEngine(0);
         if (this.renderer.xr.isPresenting && !this.vrMenu.visible) this.toggleVRMenu();
@@ -2253,6 +2266,7 @@ class VRApp {
         const remoteMove = this.remote.movement();
         if (remoteMove.x || remoteMove.z) this.focusTween = null;
         if (this.focusTween) {
+            this._flyVel?.set(0, 0, 0);
             const f = this.focusTween;
             f.t += dt;
             const p = clamp(f.t / f.dur, 0, 1);
@@ -2294,13 +2308,14 @@ class VRApp {
 
         if (this.xrSession) {
             for (const src of this.xrSession.inputSources) {
+                // Shaped sticks: speed follows how far you push, not all-or-nothing.
                 const { x: ax, y: ay } = readThumbstick(src.gamepad);
                 if (src.handedness === 'left') {
-                    if (Math.abs(ax) > 0.15) v.x += ax;
-                    if (Math.abs(ay) > 0.15) v.z += ay;
+                    v.x += ax;
+                    v.z += ay;
                 } else if (src.handedness === 'right') {
-                    if (Math.abs(ay) > 0.6) v.y -= Math.sign(ay);
-                    if (Math.abs(ax) > 0.75 && !this._snapLock) {
+                    v.y -= ay * 0.7;
+                    if (Math.abs(ax) > 0.65 && !this._snapLock) {
                         this.yaw -= Math.sign(ax) * Math.PI / 6;
                         this.applyLook();
                         this._snapLock = true;
@@ -2315,29 +2330,38 @@ class VRApp {
         const targetBank = clamp(-v.x * 0.25 + yawVel * 0.12, -0.65, 0.65);
         this._freeBank += (targetBank - this._freeBank) * Math.min(1, dt * 4);
 
+        // Ease velocity in and out instead of jumping to full speed.
+        const flyVel = this._flyVel || (this._flyVel = new THREE.Vector3());
         if (v.lengthSq() > 0) {
             const boost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 4 : 1;
-            const normTarget = clamp((this.flySpeed * boost) / 160, 0.18, 1);
+            const push = Math.min(1, v.length());
+            const normTarget = clamp((this.flySpeed * boost * push) / 160, 0.18, 1);
             this._freeSpeedNorm += (normTarget - this._freeSpeedNorm) * Math.min(1, dt * 4);
-            v.normalize().multiplyScalar(this.flySpeed * boost * dt);
+            v.multiplyScalar(this.flySpeed * boost * push / Math.max(0.0001, v.length()));
             const q = this.xrHead
                 ? this.dolly.quaternion.clone().multiply(this.xrHead.quaternion)
                 : (this.gyroActive || this.stereoFlightLook)
                 ? this.camera.getWorldQuaternion(new THREE.Quaternion())
                 : this.dolly.quaternion;
             v.applyQuaternion(q);
-            this.dolly.position.add(v);
+            flyVel.lerp(v, 1 - Math.exp(-dt * 5));
+            this.dolly.position.addScaledVector(flyVel, dt);
             this.audio.setEngine(0.25);
         } else {
             this._freeSpeedNorm += (0 - this._freeSpeedNorm) * Math.min(1, dt * 4);
+            // Glide to a stop rather than halting dead.
+            flyVel.multiplyScalar(Math.exp(-dt * 5));
+            if (flyVel.lengthSq() < 1e-4) flyVel.set(0, 0, 0);
+            else this.dolly.position.addScaledVector(flyVel, dt);
             this.audio.setEngine(0.05);
         }
 
         // nearest-body readout
         let best = null, bestD = Infinity;
-        const cp = this.camera.getWorldPosition(new THREE.Vector3());
+        const cp = this.camera.getWorldPosition(this._nearCam || (this._nearCam = new THREE.Vector3()));
+        const bp = this._nearBody || (this._nearBody = new THREE.Vector3());
         for (const b of BODIES) {
-            const d = this.system.worldPos(b.key, new THREE.Vector3()).distanceTo(cp) - b.radius;
+            const d = this.system.worldPos(b.key, bp).distanceTo(cp) - b.radius;
             if (d < bestD) { bestD = d; best = b; }
         }
         if (best) {
@@ -2453,7 +2477,7 @@ class VRApp {
         if (this.system.root.visible && this.mode !== 'dodge' && this.mode !== 'lobby') this.system.update(dt, camPos);
 
         const questInput = this.xrSession
-            ? readQuestControllers(this.xrSession, this._prevQuestInput)
+            ? smoothQuestSticks(readQuestControllers(this.xrSession, this._prevQuestInput), this._prevQuestInput, dt)
             : (this._qaQuestInput || null);
         this._prevQuestInput = questInput;
 

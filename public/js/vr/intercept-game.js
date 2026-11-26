@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { InterceptRun } from './intercept-run.js?v=20261125-q3';
+import { InterceptRun } from './intercept-run.js?v=20261127-o1';
 import {
     buildMissionCabin,
     buildSpaceBackdrop,
@@ -9,7 +9,7 @@ import {
     createSolarTexture,
     createSpaceEnvMap,
     ParticlePool
-} from './quest-assets.js?v=20261125-q3';
+} from './quest-assets.js?v=20261127-o1';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -88,6 +88,8 @@ export class InterceptGame {
 
         this.targetMeshes = new Map();
         this.shotMeshes = new Map();
+        // Recycled target/bolt meshes: building drones mid-wave stalls the headset.
+        this._pool = {};
         this.beamLines = [];
         this.empTimer = 0;
 
@@ -205,12 +207,13 @@ export class InterceptGame {
         this.root.position.copy(this.origin);
         this.root.quaternion.copy(this.rotation);
         this._clearDynamicMeshes();
+        this._prewarm(dolly.children.find(c => c.isCamera));
         this.syncScene(0);
     }
 
     _clearDynamicMeshes() {
-        for (const m of this.targetMeshes.values()) this.root.remove(m);
-        for (const s of this.shotMeshes.values()) this.root.remove(s);
+        for (const m of this.targetMeshes.values()) this._release(m);
+        for (const s of this.shotMeshes.values()) this._release(s);
         this.targetMeshes.clear();
         this.shotMeshes.clear();
         for (const b of this.beamLines) b.visible = false;
@@ -229,6 +232,63 @@ export class InterceptGame {
         this.root.quaternion.copy(this.rotation);
     }
 
+    /** Take a pooled mesh for this kind (building one only if the pool is empty). */
+    _acquire(kind) {
+        const pool = this._pool[kind] || (this._pool[kind] = []);
+        const mesh = pool.pop() || this._buildMesh(kind);
+        mesh.userData.poolKind = kind;
+        mesh.visible = true;
+        if (!mesh.parent) this.root.add(mesh);
+        return mesh;
+    }
+
+    _release(mesh) {
+        mesh.visible = false;
+        const kind = mesh.userData.poolKind;
+        (this._pool[kind] || (this._pool[kind] = [])).push(mesh);
+    }
+
+    _buildMesh(kind) {
+        if (kind === 'shot') {
+            const mesh = new THREE.Mesh(this.geoEnemyShot, this.matEnemyShot);
+            if (this.glowTex) {
+                this.matShotGlow = this.matShotGlow || new THREE.SpriteMaterial({
+                    map: this.glowTex, color: 0xff4d6d, transparent: true,
+                    blending: THREE.AdditiveBlending, depthWrite: false
+                });
+                const sprite = new THREE.Sprite(this.matShotGlow);
+                sprite.scale.set(0.9, 0.9, 1);
+                mesh.add(sprite);
+            }
+            return mesh;
+        }
+        return this._createTargetMesh({ kind });
+    }
+
+    /**
+     * Build enough of every enemy up front and compile their shaders while the
+     * countdown runs, so the first drone of a wave never costs a dropped frame.
+     */
+    _prewarm(camera) {
+        const counts = { meteor: 6, magma: 4, shard: 6, scout: 5, heavy: 4, pylon: 3, boss: 1, shot: 12 };
+        const made = [];
+        for (const [kind, n] of Object.entries(counts)) {
+            const pool = this._pool[kind] || (this._pool[kind] = []);
+            while (pool.length < n) {
+                const m = this._buildMesh(kind);
+                m.userData.poolKind = kind;
+                this.root.add(m);
+                pool.push(m);
+            }
+            for (const m of pool) { m.visible = true; m.position.set(0, -400, 0); made.push(m); }
+        }
+        try {
+            const scene = this.root.parent;
+            if (scene && camera && this.renderer?.compile) this.renderer.compile(scene, camera);
+        } catch { /* compile is an optimisation only */ }
+        for (const m of made) m.visible = false;
+    }
+
     _createTargetMesh(t) {
         if (t.kind === 'meteor') return new THREE.Mesh(this.geoMeteor, this.matMeteor);
         if (t.kind === 'magma') {
@@ -243,7 +303,10 @@ export class InterceptGame {
         }
         if (t.kind === 'scout') return buildDroneVisual(false, this.envMap);
         if (t.kind === 'heavy') return buildDroneVisual(true, this.envMap);
-        if (t.kind === 'pylon') return new THREE.Mesh(new THREE.OctahedronGeometry(0.62, 0), this.matPylon);
+        if (t.kind === 'pylon') {
+            this.geoPylon = this.geoPylon || new THREE.OctahedronGeometry(0.62, 0);
+            return new THREE.Mesh(this.geoPylon, this.matPylon);
+        }
         if (t.kind === 'boss') return buildBossVisual(this.envMap);
         return new THREE.Mesh(this.geoMeteor, this.matMeteor);
     }
@@ -312,6 +375,7 @@ export class InterceptGame {
 
             this._handleEvents();
         }
+        this.run.events = [];
 
         this.offset.set(this.run.x, 0, 0).applyQuaternion(this.rotation);
         dolly.position.copy(this.origin).add(this.offset);
@@ -368,9 +432,8 @@ export class InterceptGame {
             activeIds.add(t.id);
             let mesh = this.targetMeshes.get(t.id);
             if (!mesh) {
-                mesh = this._createTargetMesh(t);
+                mesh = this._acquire(t.kind);
                 this.targetMeshes.set(t.id, mesh);
-                this.root.add(mesh);
             }
             mesh.position.set(t.x, t.y, t.z);
             if (t.kind === 'meteor' || t.kind === 'magma' || t.kind === 'shard' || t.kind === 'pylon') {
@@ -385,7 +448,7 @@ export class InterceptGame {
         }
         for (const [id, mesh] of this.targetMeshes.entries()) {
             if (!activeIds.has(id)) {
-                this.root.remove(mesh);
+                this._release(mesh);
                 this.targetMeshes.delete(id);
             }
         }
@@ -395,32 +458,20 @@ export class InterceptGame {
             shotIds.add(s.id);
             let mesh = this.shotMeshes.get(s.id);
             if (!mesh) {
-                mesh = new THREE.Mesh(this.geoEnemyShot, this.matEnemyShot);
-                if (this.glowTex) {
-                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-                        map: this.glowTex,
-                        color: 0xff4d6d,
-                        transparent: true,
-                        blending: THREE.AdditiveBlending,
-                        depthWrite: false
-                    }));
-                    sprite.scale.set(0.9, 0.9, 1);
-                    mesh.add(sprite);
-                }
+                mesh = this._acquire('shot');
                 this.shotMeshes.set(s.id, mesh);
-                this.root.add(mesh);
             }
             mesh.position.set(s.x, s.y, s.z);
         }
         for (const [id, mesh] of this.shotMeshes.entries()) {
             if (!shotIds.has(id)) {
-                this.root.remove(mesh);
+                this._release(mesh);
                 this.shotMeshes.delete(id);
             }
         }
 
         // Render blaster / rail-lance / deflected tracer beams
-        const up = new THREE.Vector3(0, 1, 0);
+        const up = this._up || (this._up = new THREE.Vector3(0, 1, 0));
         this.beamLines.forEach((cyl, idx) => {
             const shot = run.playerShots[idx];
             if (!shot) {

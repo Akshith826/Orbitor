@@ -1,7 +1,7 @@
 {
   "name": "orbitor",
   "version": "1.0.0",
-  "description": "VR Deep Space Ride and Meta Quest 3 VR games, extracted from SpaceVerse as a standalone app.",
+  "description": "Orbitor: the VR Deep Space Ride and Meta Quest 3 VR games, VR by default.",
   "private": true,
   "license": "MIT",
   "engines": {

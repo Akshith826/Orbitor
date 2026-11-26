@@ -1,5 +1,5 @@
 /**
- * Mission core — the state machine every Spaceverse mission runs on.
+ * Mission core — the state machine every Orbitor mission runs on.
  *
  * Three constraints shape this file, and breaking any of them breaks a mission
  * somewhere:

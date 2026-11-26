@@ -28,7 +28,7 @@ describe('VR Arcade mission outcomes', () => {
     });
 
     it('docks at a safe closing speed and rejects fast contact even when aligned', () => {
-        const aligned = run => ({ x: -run.x * 0.8, y: -run.y * 0.8 });
+        const aligned = run => ({ x: -run.x * 0.8, y: -run.y * 0.8, rollAxis: -run.roll * 2 });
         const docking = start('orbital-docking');
         docking.action('brake');
         tick(docking, 42, aligned);

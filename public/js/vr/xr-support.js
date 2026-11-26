@@ -15,7 +15,7 @@ export async function questOnlyVRStatus(xr, secure) {
         return {
             label: 'Meta Quest 3 requires HTTPS',
             available: false,
-            reason: 'Open this SpaceVerse Arcade address over trusted HTTPS inside your Meta Quest 3 Browser.'
+            reason: 'Open this Orbitor address over trusted HTTPS inside your Meta Quest 3 Browser.'
         };
     }
     if (!xr) {
@@ -42,16 +42,57 @@ export async function questOnlyVRStatus(xr, secure) {
     }
 }
 
+/**
+ * Stick response curve. Small tilts give fine, slow control; full tilt still
+ * reaches 1. `expo` 0 is linear, 1 is fully cubic.
+ */
+export const STICK_EXPO = 0.4;
+export function shapeAxis(v, expo = STICK_EXPO) {
+    return v * (1 - expo + expo * v * v);
+}
+
+/** Rescale a stick past its radial deadzone and apply the response curve. */
+function shapeStick(rawX, rawY, deadzone) {
+    const mag = Math.hypot(rawX, rawY);
+    if (mag < deadzone) return { x: 0, y: 0 };
+    const clamped = Math.min(1, mag);
+    const shaped = shapeAxis((clamped - deadzone) / (1 - deadzone));
+    const factor = shaped / mag;
+    return {
+        x: Math.max(-1, Math.min(1, rawX * factor)),
+        y: Math.max(-1, Math.min(1, rawY * factor))
+    };
+}
+
 export function readThumbstick(gamepad, deadzone = 0.18) {
     // xr-standard reserves axes 0/1 for the touchpad and 2/3 for the stick.
     // Accept the two-axis layout some nonstandard controllers expose.
     const axes = gamepad?.axes;
     const offset = axes?.length >= 4 ? 2 : 0;
-    const rawX = axes?.[offset] || 0;
-    const rawY = axes?.[offset + 1] || 0;
-    const mag = Math.hypot(rawX, rawY);
-    if (mag < deadzone) return { x: 0, y: 0 };
-    return { x: rawX, y: rawY };
+    const rawX = Number.isFinite(axes?.[offset]) ? axes[offset] : 0;
+    const rawY = Number.isFinite(axes?.[offset + 1]) ? axes[offset + 1] : 0;
+    return shapeStick(rawX, rawY, deadzone);
+}
+
+/**
+ * Smooth both Touch Plus sticks over time (frame-rate independent), so a
+ * twitchy thumb or a noisy stick never jerks the view or the craft. Mutates
+ * and returns `current`; `previous` is last frame's smoothed reading.
+ */
+export function smoothQuestSticks(current, previous, dt, rate = 14) {
+    if (!current) return current;
+    const k = 1 - Math.exp(-Math.max(0, Math.min(0.1, Number.isFinite(dt) ? dt : 0)) * rate);
+    for (const hand of ['left', 'right']) {
+        const c = current[hand];
+        const p = previous?.[hand];
+        if (!c?.stick || !p?.stick) continue;
+        let x = p.stick.x + (c.stick.x - p.stick.x) * k;
+        let y = p.stick.y + (c.stick.y - p.stick.y) * k;
+        if (c.stick.x === 0 && Math.abs(x) < 0.01) x = 0;
+        if (c.stick.y === 0 && Math.abs(y) < 0.01) y = 0;
+        c.stick = { x, y };
+    }
+    return current;
 }
 
 export function readQuestHand(gamepad, deadzone = 0.16) {
@@ -72,17 +113,7 @@ export function readQuestHand(gamepad, deadzone = 0.16) {
     const offset = axes.length >= 4 ? 2 : 0;
     const rawX = Number.isFinite(axes[offset]) ? axes[offset] : 0;
     const rawY = Number.isFinite(axes[offset + 1]) ? axes[offset + 1] : 0;
-    const mag = Math.hypot(rawX, rawY);
-    let stick = { x: 0, y: 0 };
-    if (mag > deadzone) {
-        const clamped = Math.min(1, mag);
-        const scaled = (clamped - deadzone) / (1 - deadzone);
-        const factor = scaled / mag;
-        stick = {
-            x: Math.max(-1, Math.min(1, rawX * factor)),
-            y: Math.max(-1, Math.min(1, rawY * factor))
-        };
-    }
+    const stick = shapeStick(rawX, rawY, deadzone);
 
     const buttons = gamepad.buttons || [];
     const btn0 = buttons[0];

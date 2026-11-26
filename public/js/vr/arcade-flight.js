@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { ArcadeRun, SYSTEMS, SAMPLE_X, roverRocks, roverCrystals } from './arcade-run.js?v=20261125-q3';
+import { ArcadeRun, SYSTEMS, SAMPLE_X, roverRocks, roverCrystals } from './arcade-run.js?v=20261127-o1';
 import {
     buildMissionCabin,
     buildSpaceBackdrop,
@@ -11,10 +11,11 @@ import {
     createSolarTexture,
     createSpaceEnvMap,
     ParticlePool,
+    roundRectPath,
     safeCanvas,
     safeLoadTexture
-} from './quest-assets.js?v=20261125-q3';
-import { setRayFromObject } from './xr-support.js?v=20261125-q3';
+} from './quest-assets.js?v=20261127-o1';
+import { setRayFromObject } from './xr-support.js?v=20261127-o1';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -645,18 +646,24 @@ export class ArcadeFlight {
         let tex = null;
         if (surface) {
             const { ctx, canvas } = surface;
-            ctx.fillStyle = '#091627';
-            ctx.fillRect(0, 0, 512, 208);
-            ctx.strokeStyle = this.run.config.accent;
-            ctx.lineWidth = 8;
-            ctx.strokeRect(4, 4, 504, 200);
+            const accent = this.run.config.accent;
+            ctx.clearRect(0, 0, 512, 208);
+            roundRectPath(ctx, 4, 4, 504, 200, 44);
+            const bg = ctx.createLinearGradient(0, 0, 0, 208);
+            bg.addColorStop(0, '#12233d');
+            bg.addColorStop(1, '#070f1d');
+            ctx.fillStyle = bg;
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = accent;
+            ctx.stroke();
             ctx.textAlign = 'center';
             ctx.fillStyle = '#f3faff';
-            ctx.font = 'bold 54px system-ui';
-            ctx.fillText(title, 256, 88, 470);
-            ctx.fillStyle = '#b9d2e8';
-            ctx.font = '32px system-ui';
-            ctx.fillText(hint, 256, 150, 470);
+            ctx.font = '800 52px Inter, system-ui, sans-serif';
+            ctx.fillText(title, 256, 92, 460);
+            ctx.fillStyle = '#a9bdd6';
+            ctx.font = '500 28px Inter, system-ui, sans-serif';
+            ctx.fillText(hint, 256, 150, 460);
             tex = new THREE.CanvasTexture(canvas);
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.generateMipmaps = false;
@@ -668,7 +675,8 @@ export class ArcadeFlight {
             new THREE.MeshBasicMaterial({
                 map: tex,
                 color: tex ? 0xffffff : 0x0b1f38,
-                toneMapped: false
+                toneMapped: false,
+                transparent: Boolean(tex)
             }),
             x, y, z
         );
@@ -732,7 +740,7 @@ export class ArcadeFlight {
             if (left?.triggerJustPressed) this.run.action('brake');
             if (right?.triggerJustPressed) {
                 const slot = rig?.rightHand?.controller;
-                const hit = slot ? this.pick(setRayFromObject(new THREE.Raycaster(), slot)) : null;
+                const hit = slot ? this.pick(setRayFromObject(this._rc || (this._rc = new THREE.Raycaster()), slot)) : null;
                 if (hit?.object?.userData?.arcadeAction) this.run.action(hit.object.userData.arcadeAction);
                 else this.run.action('thrust');
             }
@@ -745,7 +753,7 @@ export class ArcadeFlight {
             if (right?.triggerJustPressed) {
                 if (this.run.matched && this.run.closing <= 0.22) {
                     const slot = rig?.rightHand?.controller;
-                    const hit = slot ? this.pick(setRayFromObject(new THREE.Raycaster(), slot)) : null;
+                    const hit = slot ? this.pick(setRayFromObject(this._rc || (this._rc = new THREE.Raycaster()), slot)) : null;
                     if (hit?.object?.userData?.arcadeAction === 'tether' || Math.hypot(this.run.targetX - this.run.podX, this.run.targetY - this.run.podY) < 2.2) {
                         this.run.action('tether');
                     }
@@ -754,7 +762,7 @@ export class ArcadeFlight {
                 }
             }
         } else if (this.slug === 'satellite-repair') {
-            const rc = new THREE.Raycaster();
+            const rc = this._rc || (this._rc = new THREE.Raycaster());
             if (left?.triggerJustPressed && rig?.leftHand?.controller && this.run.repairStep === 1) {
                 const hit = this.pick(setRayFromObject(rc, rig.leftHand.controller));
                 if (hit?.object?.userData?.repairRole === 'spare') {
@@ -856,6 +864,7 @@ export class ArcadeFlight {
         }
 
         this._handleEvents(dt);
+        this.run.events = [];
         this._spawnContinuousEffects(dt, simInput);
         this.syncScene(dt, rig);
     }

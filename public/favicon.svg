@@ -1,19 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Spaceverse">
-  <title>Spaceverse</title>
-  <!--
-    Lattice, small cut, on the app tile. Same geometry as
-    /public/images/brand/spaceverse-tile.svg — keep the two in step if either
-    is redrawn. Ten dots in a 3/4/3 arrangement, inset from the small cut so
-    the mark clears the tile's corner radius.
-  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Orbitor">
+  <title>Orbitor</title>
+  <!-- Orbitor mark: a planet, a tilted orbit and a satellite on it, on the app tile. -->
+  <defs>
+    <radialGradient id="planet" cx="38%" cy="34%" r="70%">
+      <stop offset="0" stop-color="#9ff6e4"/>
+      <stop offset="0.55" stop-color="#2aa7c9"/>
+      <stop offset="1" stop-color="#0d2b4a"/>
+    </radialGradient>
+  </defs>
   <rect width="100" height="100" rx="22" fill="#05070D"/>
-
-  <g stroke-linecap="round" stroke-width="14" stroke-dasharray="0.1 16">
-    <line x1="34" y1="30" x2="66" y2="30" stroke="#F2F6FF" stroke-opacity=".85"/>
-    <line x1="26" y1="50" x2="74" y2="50" stroke="#22D3EE"/>
-    <line x1="34" y1="70" x2="66" y2="70" stroke="#F2F6FF" stroke-opacity=".7"/>
-  </g>
-
-  <ellipse cx="50" cy="50" rx="36" ry="9.5" fill="none" stroke="#A78BFA" stroke-width="6"
-           transform="rotate(-24 50 50)"/>
+  <ellipse cx="50" cy="52" rx="38" ry="11" fill="none" stroke="#64FFDA" stroke-opacity=".35" stroke-width="4"
+           transform="rotate(-22 50 52)"/>
+  <circle cx="50" cy="52" r="20" fill="url(#planet)"/>
+  <path d="M 13.6 64.8 A 38 11 -22 0 0 86.4 39.2" fill="none" stroke="#64FFDA" stroke-width="4" stroke-linecap="round"
+        transform="rotate(0 50 52)"/>
+  <circle cx="84" cy="38" r="5.5" fill="#F2F6FF"/>
 </svg>

@@ -64,7 +64,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
             v.ride.stop();
             return said;
         });
-        const PLANET_FACTS = await page.evaluate(() => import('/public/js/vr/planet-announcer.js?v=20261126-3').then(m => m.PLANET_FACTS));
+        const PLANET_FACTS = await page.evaluate(() => import('/public/js/vr/planet-announcer.js?v=20261127-o1').then(m => m.PLANET_FACTS));
         const facts = spoken.filter(t => Object.values(PLANET_FACTS).includes(t));
         const keys = facts.map(t => Object.keys(PLANET_FACTS).find(k => PLANET_FACTS[k] === t));
         assert.deepEqual([...keys].sort(), Object.keys(PLANET_FACTS).sort(), 'every planet announced once: ' + keys.join(', '));
@@ -85,7 +85,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
         assert.deepEqual([s.same, s.entry, s.lobby], ['yes', 'dodge', false]);
         const deck = await page.evaluate(() => getComputedStyle(document.getElementById('quest3-deck')).display);
         assert.notEqual(deck, 'none', 'Quest 3 deck shown');
-        assert.equal(await page.title(), 'Mars Rover Expedition — Meta Quest 3 · SpaceVerse');
+        assert.equal(await page.title(), 'Mars Rover Expedition — Meta Quest 3 · Orbitor');
         console.log('Dock → Mars Rover, same page, Quest 3 deck shown ✓');
 
         // Another game straight after: the right game is selected.

@@ -243,7 +243,11 @@ export class ArcadeRun {
         const order = this.random() < 0.5 ? 1 : 2;
         this.faults = Array.from({ length: SYSTEMS.length }, (_, index) => (firstFault + index * order) % 3);
         if (this.slug === 'lunar-landing' || this.slug === 'orbital-docking') this.x = 2.5;
-        if (this.slug === 'orbital-docking') this.y = -1.2;
+        if (this.slug === 'orbital-docking') {
+            this.y = -1.2;
+            // The station starts rolled off-axis so the roll alignment is a real step.
+            this.roll = (this.random() < 0.5 ? -1 : 1) * (0.6 + clamp(this.random(), 0, 1) * 0.28);
+        }
     }
 
     emit(type, payload = {}) {
@@ -280,7 +284,7 @@ export class ArcadeRun {
             this.score = Math.round(1200 + Math.max(0, 2.4 - offset) * 500 + Math.max(0, 2.7 - this.descent) * 350 + this.fuel * 14);
         } else if (this.slug === 'orbital-docking') {
             const offset = Math.hypot(this.x, this.y);
-            this.score = Math.round(1400 + Math.max(0, 0.75 - offset) * 1400 + Math.max(0, 0.65 - this.closing) * 1200 + remaining * 15);
+            this.score = Math.round(1400 + Math.max(0, 0.75 - offset) * 1400 + Math.max(0, 0.65 - this.closing) * 1200 + Math.max(0, 0.45 - Math.abs(this.roll)) * 900 + remaining * 15);
         } else if (this.slug === 'satellite-repair') {
             this.score = Math.round(1600 + remaining * 22 - this.mistakes * 150);
         } else if (this.slug === 'mars-rover') {
@@ -430,7 +434,8 @@ export class ArcadeRun {
     update(dt, input = {}) {
         if (!Number.isFinite(dt) || dt <= 0) return;
         dt = Math.min(dt, 0.05);
-        this.events = [];
+        // Events are cleared by the host after it plays them, so ones raised by
+        // action() earlier in the same frame are not lost.
         if (this.state === 'countdown') {
             const prevSec = Math.ceil(this.countdown);
             this.countdown = Math.max(0, this.countdown - dt);
@@ -466,9 +471,9 @@ export class ArcadeRun {
 
     land(dt, x, brakeHeld, z = 0, throttle = undefined, stabilize = false) {
         const hover = Boolean(stabilize) && this.fuel > 0;
-        const rate = hover ? 5.5 : 2.5;
-        this.vx = slowToward(this.vx, hover ? x * 1.2 : x * 3, dt, rate);
-        this.vz = slowToward(this.vz, hover ? z * 1.2 : z * 3, dt, rate);
+        const rate = hover ? 4.5 : 2.2;
+        this.vx = slowToward(this.vx, hover ? x * 1.1 : x * 2.4, dt, rate);
+        this.vz = slowToward(this.vz, hover ? z * 1.1 : z * 2.4, dt, rate);
         this.x = clamp(this.x + this.vx * dt, -9, 9);
         this.z = clamp(this.z + this.vz * dt, -9, 9);
 
@@ -508,7 +513,7 @@ export class ArcadeRun {
             this.closing = clamp(this.closing + thrustAxis * dt * 0.9, 0, 3);
         }
         if (Math.abs(rollAxis) > 0.05) {
-            this.roll = clamp(this.roll + rollAxis * dt * 1.2, -Math.PI, Math.PI);
+            this.roll = clamp(this.roll + rollAxis * dt * 0.85, -Math.PI, Math.PI);
         }
         this.range = Math.max(0, this.range - this.closing * dt);
         if (this.range > 0) return;
@@ -521,7 +526,7 @@ export class ArcadeRun {
     }
 
     drive(dt, x, throttle = undefined, brake = undefined, drillHeld = false) {
-        this.vx = slowToward(this.vx, x * 2.8, dt, 3);
+        this.vx = slowToward(this.vx, x * 2.4, dt, 2.6);
         this.x = clamp(this.x + this.vx * dt, -5.2, 5.2);
         const stop = (this.samples + 1) * 36 - 2.3;
         const previous = this.distance;
@@ -565,8 +570,8 @@ export class ArcadeRun {
     }
 
     rescue(dt, x = 0, y = 0) {
-        this.podX = clamp(slowToward(this.podX, x * 2.2, dt, 3), -2.6, 2.6);
-        this.podY = clamp(slowToward(this.podY, y * 1.1, dt, 3), -1.3, 1.3);
+        this.podX = clamp(slowToward(this.podX, x * 2.2, dt, 2.4), -2.6, 2.6);
+        this.podY = clamp(slowToward(this.podY, y * 1.1, dt, 2.4), -1.3, 1.3);
         if (this.matched) {
             this.closing = slowToward(this.closing, 0, dt, 3);
             this.driftScale = slowToward(this.driftScale, 0.43, dt, 2);

@@ -1,8 +1,8 @@
 # Orbitor
 
-The **VR Deep Space Ride** and the seven **Meta Quest 3 VR games** from
-[SpaceVerse](https://github.com/karthikguntoju/spaceverse), extracted into a small
-standalone app. It needs no database, no accounts and no API keys.
+The **VR Deep Space Ride** and the seven **Meta Quest 3 VR games**, as a small
+standalone app that runs in VR by default. (Originally extracted from the
+[SpaceVerse](https://github.com/karthikguntoju/spaceverse) project.) It needs no database, no accounts and no API keys.
 
 | Experience | URL |
 | --- | --- |
@@ -116,14 +116,14 @@ tests/, scripts/     Unit tests and Puppeteer browser checks
 three.js (r182) is served from `node_modules`. The server patches it so the Quest
 compositor gets the standard `XRWebGLLayer`, the same patch the original app applies.
 
-## Differences from SpaceVerse
+## Differences from the original project
 
 - No login. Every visitor is a guest pilot, and `/api/user` always reports one.
 - Personal bests are saved in the browser (`localStorage`), as in the original.
   Scan Hunt runs are scored by the server but not stored.
 - The home page is a 3D VR lobby, and every page enters VR by default (see above).
 - The AI chat widget, the 2D arcade, the quiz, the simulator and the other
-  SpaceVerse pages are not included.
+  pages of the original project are not included.
 
 ## License
 
