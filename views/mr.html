@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#05070d">
+    <title>Solar System In Your Room · Orbitor</title>
+    <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --text: #e8eefc; --muted: #9aa8c7; --accent: #c4b5fd; --mint: #64ffda; --glass: rgba(8,15,28,.66); --line: rgba(255,255,255,.14); }
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+        html, body { margin: 0; height: 100%; overflow: hidden; background: #05070d; color: var(--text); font-family: Inter, system-ui, sans-serif; }
+        #mr { position: fixed; inset: 0; touch-action: none; }
+        #mr canvas { display: block; cursor: grab; }
+        #loading { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: #05070d;
+            font-family: Orbitron, sans-serif; letter-spacing: .3em; color: var(--accent); transition: opacity .6s; }
+        #loading.done { opacity: 0; pointer-events: none; }
+        .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center;
+            padding: max(14px, env(safe-area-inset-top)) 18px 14px; pointer-events: none; }
+        .bar > * { pointer-events: auto; }
+        .chip { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; font: 600 14px Inter, sans-serif;
+            color: var(--text); text-decoration: none; background: var(--glass); border: 1px solid var(--line);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); cursor: pointer; }
+        .chip:hover, .chip:focus-visible { border-color: var(--accent); outline: none; }
+        .chip.primary { background: var(--accent); color: #12082a; border-color: var(--accent); }
+        .panel { position: fixed; left: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 10; max-width: 420px;
+            padding: 18px 20px; border-radius: 20px; background: var(--glass); border: 1px solid var(--line);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+        .panel .tag { font: 700 11px Inter, sans-serif; letter-spacing: .14em; color: var(--accent); }
+        .panel h1 { font: 800 22px Orbitron, Inter, sans-serif; margin: 6px 0 8px; letter-spacing: .03em; }
+        .panel p { margin: 0 0 12px; color: var(--muted); line-height: 1.5; font-size: 14px; }
+        .panel .row { display: flex; gap: 8px; flex-wrap: wrap; }
+        body.in-xr .bar, body.in-xr .panel { visibility: hidden; }
+        @media (max-width: 600px) { .panel { right: 18px; max-width: none; } }
+    </style>
+</head>
+<body>
+    <div id="mr" aria-hidden="true"></div>
+    <div id="loading">ORBITOR</div>
+    <header class="bar">
+        <a class="chip" href="/">← Lobby</a>
+        <a class="chip" href="/quest-guide">📘 Meta Quest guide</a>
+    </header>
+    <section class="panel" aria-labelledby="mr-title">
+        <div class="tag">MIXED REALITY · META QUEST 3</div>
+        <h1 id="mr-title">Solar System In Your Room</h1>
+        <p>Your room stays visible while the planets orbit at table height. Walk around Saturn, point at any world to learn about it, grip to move the whole system, and squeeze both grips to resize it.</p>
+        <div class="row">
+            <button id="enter-ar" class="chip primary" type="button" hidden>🪐 Enter mixed reality</button>
+        </div>
+        <p id="ar-note" role="status" style="margin:12px 0 0">Checking for mixed reality…</p>
+    </section>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/lib/three/webxr.module.js?v=20261125-xr1",
+            "three/addons/": "/lib/three/addons/"
+        }
+    }
+    </script>
+    <script type="module" src="/public/js/mr/mr-app.js?v=20261127-o1"></script>
+</body>
+</html>

@@ -16,16 +16,16 @@ const assert = require('node:assert/strict');
 const puppeteer = require('puppeteer');
 
 const base = process.env.VR_TEST_URL || 'http://localhost:5000';
-const PAGES = ['/', '/vr-ride', '/vr-solar-system', '/games/orbital-intercept', '/games/asteroid-dodge',
+const PAGES = ['/', '/mr', '/vr-ride', '/vr-solar-system', '/games/orbital-intercept', '/games/asteroid-dodge',
     '/games/lunar-landing', '/games/orbital-docking', '/games/satellite-repair', '/games/mars-rover', '/games/space-rescue'];
 
 function fakeHeadset() {
     const calls = [];
     window.__xrCalls = calls;
     const xr = new EventTarget();
-    xr.isSessionSupported = async mode => mode === 'immersive-vr';
-    xr.requestSession = mode => {
-        calls.push({ type: 'request', mode, gesture: Boolean(navigator.userActivation && navigator.userActivation.isActive) });
+    xr.isSessionSupported = async mode => mode === 'immersive-vr' || mode === 'immersive-ar';
+    xr.requestSession = (mode, init) => {
+        calls.push({ type: 'request', mode, init, gesture: Boolean(navigator.userActivation && navigator.userActivation.isActive) });
         return Promise.reject(new DOMException('simulated headset', 'NotSupportedError'));
     };
     xr.offerSession = mode => {
@@ -37,7 +37,7 @@ function fakeHeadset() {
 
 async function ready(page, url) {
     await page.goto(base + url, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__lobby || window.__vr, { timeout: 120000 });
+    await page.waitForFunction(() => window.__lobby || window.__vr || window.__mr, { timeout: 120000 });
 }
 
 (async () => {
@@ -66,10 +66,12 @@ async function ready(page, url) {
             await page.mouse.click(640, 200);
             await page.waitForFunction(() => window.__xrCalls.some(c => c.type === 'request'), { timeout: 10000 });
             const req = await page.evaluate(() => window.__xrCalls.find(c => c.type === 'request'));
-            assert.equal(req.mode, 'immersive-vr', `${url}: immersive session requested`);
+            const want = url === '/mr' ? 'immersive-ar' : 'immersive-vr';
+            assert.equal(req.mode, want, `${url}: ${want} session requested`);
+            if (want === 'immersive-ar') assert.ok(req.init?.requiredFeatures?.includes('local-floor'), '/mr asks for floor tracking');
             assert.equal(req.gesture, true, `${url}: requested inside the click gesture`);
             assert.equal(await page.$('#auto-vr'), null, `${url}: prompt closes`);
-            console.log(`${url}: VR offered, one click requested immersive-vr ✓`);
+            console.log(`${url}: offered, one click requested ${want} ✓`);
         }
 
         // "Stay in 2D" sticks for the session.

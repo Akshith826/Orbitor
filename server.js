@@ -38,7 +38,7 @@ app.use(helmet({
 }));
 // WebXR, motion sensors and the screen wake lock are allowed for this origin.
 app.use((req, res, next) => {
-    res.set('Permissions-Policy', 'xr-spatial-tracking=(self), gyroscope=(self), accelerometer=(self), magnetometer=(self), screen-wake-lock=(self)');
+    res.set('Permissions-Policy', 'xr-spatial-tracking=(self), gyroscope=(self), accelerometer=(self), magnetometer=(self), screen-wake-lock=(self), geolocation=(self)');
     next();
 });
 app.use(express.json({ limit: '64kb' }));
@@ -55,6 +55,8 @@ const QUEST_GAMES = ['orbital-intercept', 'asteroid-dodge', 'lunar-landing', 'or
 app.get(QUEST_GAMES.map(slug => '/games/' + slug), view('vr-working.html'));
 app.get('/games/:slug', (req, res) => res.redirect('/games'));
 app.get('/quest-guide', view('quest-guide.html'));
+// Mixed reality solar system (WebXR immersive-ar with passthrough on Meta Quest 3).
+app.get('/mr', view('mr.html'));
 app.get('/favicon.ico', (req, res) => {
     const iconPath = path.join(__dirname, 'public', 'favicon.svg');
     if (fs.existsSync(iconPath)) return res.type('image/svg+xml').sendFile(iconPath);

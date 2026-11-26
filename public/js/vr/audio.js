@@ -102,8 +102,10 @@ export class SpaceAudio {
         const g = c.createGain();
         g.gain.value = 0;
         g.connect(this.master);
+        this.padOscs = [];
         [55, 82.4, 110, 164.8].forEach((f, i) => {
             const o = c.createOscillator();
+            this.padOscs.push(o);
             o.type = i % 2 ? 'sine' : 'triangle';
             o.frequency.value = f;
             const og = c.createGain();
@@ -123,6 +125,38 @@ export class SpaceAudio {
     setPad(level) {
         if (!this.pad) return;
         this.pad.gain.setTargetAtTime(level, this.ctx.currentTime, 0.8);
+    }
+
+    /* ── black hole: everything sinks in pitch as time slows (0..1) ── */
+    timeDilation(amount = 0) {
+        if (!this.ctx || !this.padOscs) return;
+        const a = Math.max(0, Math.min(1, amount));
+        if (Math.abs(a - (this._dilation || 0)) < 0.01) return;
+        this._dilation = a;
+        const t = this.ctx.currentTime;
+        for (const o of this.padOscs) o.detune.setTargetAtTime(-1200 * a, t, 0.4);
+        this.pad.gain.setTargetAtTime(0.18 + a * 0.55, t, 0.6);
+        if (this.engine) this.engine.lp.frequency.setTargetAtTime(110 + 220 * (1 - a), t, 0.5);
+    }
+
+    /* ── deep double thump, felt as much as heard ── */
+    heartbeat() {
+        if (!this.ctx) return;
+        const c = this.ctx;
+        [0, 0.32].forEach((offset, i) => {
+            const t = c.currentTime + offset;
+            const o = c.createOscillator();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(62, t);
+            o.frequency.exponentialRampToValueAtTime(32, t + 0.28);
+            const g = c.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(i ? 0.5 : 0.75, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+            o.connect(g).connect(this.master);
+            o.start(t);
+            o.stop(t + 0.4);
+        });
     }
 
     /* ── one-shot: rock tearing past the canopy ── */

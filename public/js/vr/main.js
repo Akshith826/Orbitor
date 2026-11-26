@@ -37,6 +37,7 @@ import { guardXRFrames } from './xr-frame-guard.js?v=20261127-o1';
 import { setupAutoVR, navigateInVR, XR_SESSION_INIT } from './auto-vr.js?v=20261127-o1';
 import { LobbyScene } from '../lobby/lobby-scene.js?v=20261127-o1';
 import { PlanetAnnouncer } from './planet-announcer.js?v=20261127-o1';
+import { PlanetFocus } from './planet-focus.js?v=20261127-o1';
 import MissionCore from '../game/core.js';
 import { createScanHunt } from '../game/missions/scan-hunt.js';
 
@@ -270,6 +271,13 @@ class VRApp {
 
     /** Launch an experience from a lobby panel (mouse, touch or controller). */
     launchFromLobby(exp) {
+        if (exp.action === 'locate') {
+            this.audio.init();
+            this.audio.blip(760);
+            this.lobby.flash(exp);
+            this.lobby.locate().catch(() => {});
+            return;
+        }
         if (this.lobbyLaunching) return;
         this.lobbyLaunching = true;
         this.lobby.flash(exp);
@@ -353,6 +361,11 @@ class VRApp {
         this.ride.onNarrate = txt => this.narrate(txt);
         this.ride.onProgress = (p, t, total) => this.onRideProgress(p, t, total);
         this.ride.onFinish = () => this.onRideFinish();
+        // Black hole heartbeat: a double pulse in both Touch Plus controllers.
+        this.ride.onHeartbeat = () => {
+            this.pulse(0.75, 90);
+            setTimeout(() => this.pulse(0.5, 80), 320);
+        };
         this.ride.onFov = (fov, spd) => {
             if (!this.renderer.xr.isPresenting) {
                 const want = THREE.MathUtils.clamp(fov + 12 + spd * 2, 78, 96);
@@ -389,6 +402,7 @@ class VRApp {
         MissionCore.on('result', (result) => this.onMissionResult(result));
 
         this.buildVRInfoPanel();
+        this.planetFocus = new PlanetFocus(this.scene);
         this.buildVRMenu();
         this.buildControllers();
         this.remote = new RemoteInput({
@@ -1734,6 +1748,7 @@ class VRApp {
         this.raycaster.set(origin, dir);
         const hits = this.raycaster.intersectObjects(this.system.pickTargets, false);
         if (hits.length) this.showBody(hits[0].object.userData.bodyKey, true);
+        else if (this.mode === 'explore') this.hideBodyFocus();
     }
 
     pickAt(cx, cy) {
@@ -1789,6 +1804,7 @@ class VRApp {
         if (d.moons.length) stats += `<span>MOONS <b>${d.moons.join(' · ')}</b></span>`;
         $('info-stats').innerHTML = stats;
         $('info-card').classList.add('show');
+        this.presentBody(key, d);
         this.audio.blip(880);
         this.setHud(d.name.toUpperCase(), d.fact.slice(0, 64));
         this.speak(`${d.name}. ${d.fact}`);
@@ -1797,6 +1813,49 @@ class VRApp {
             this.cockpit.setNarration(d.fact);
         }
         if (travel) this.flyTo(key);
+    }
+
+    /** Colour of a body (planets from BODIES, moons from their parent's moon list). */
+    bodyColor(key) {
+        const [pk, moonName] = key.split('/');
+        const body = BODIES.find(b => b.key === pk);
+        if (moonName) return body?.moons?.find(m => m.name === moonName)?.color ?? 0xcfd8e8;
+        return body?.color ?? 0x64ffda;
+    }
+
+    /**
+     * Show the chosen world properly wherever the player is looking from: the
+     * glow / scan ping / depth-name focus on the planet itself, a zoom pulse on
+     * a flat screen, and the holographic info card inside a headset or Cardboard
+     * view (the page's own info card cannot be seen there).
+     */
+    presentBody(key, d) {
+        this.planetFocus.show(key, d.name, d.radius, this.bodyColor(key), out => this.system.worldPos(key, out));
+        if (!this.renderer.xr.isPresenting) this._zoomPulse = 1;
+        if (this.renderer.xr.isPresenting || this.stereo) this.showInfoCard(d);
+    }
+
+    /** Pin the info card in front of the player, slightly to the right, facing them. */
+    showInfoCard(d) {
+        const panel = this.vrInfoPanel;
+        if (!panel) return;
+        this.drawVRInfoPanel(d);
+        this.dolly.add(panel);
+        const head = this.xrHead || this.camera;
+        const yaw = new THREE.Euler().setFromQuaternion(head.quaternion, 'YXZ').y;
+        const offset = new THREE.Vector3(0.42, -0.14, -1.15).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        panel.position.copy(head.position).add(offset);
+        panel.rotation.set(-0.06, yaw - 0.32, 0, 'YXZ');
+        setPhoneUILayer(panel, Boolean(this.stereo));
+        panel.visible = true;
+        panel.userData.appear = 0;
+        panel.scale.setScalar(0.82);
+        panel.material.opacity = 0;
+    }
+
+    hideBodyFocus() {
+        this.planetFocus?.hide();
+        if (this.vrInfoPanel?.parent === this.dolly) this.vrInfoPanel.visible = false;
     }
 
     flyTo(key) {
@@ -1830,6 +1889,7 @@ class VRApp {
         const dist = d.radius * (targetKey === 'saturn' ? 2.45 : 1.72) + (d.kind.indexOf('MOON') === 0 ? 1.2 : 1.8);
         const to = target.clone().addScaledVector(viewDir, dist);
         this.focusTween = { from, to, target, viewDir, t: 0, dur: 2.0, key: targetKey, dist, radius: d.radius };
+        this.presentBody(targetKey, d);
         this.audio.blip(940);
         this.toast(`Low-orbit pass over ${d.name} — 4K telemetry locked`);
     }
@@ -2507,6 +2567,7 @@ class VRApp {
         }
         else if (this.mode === 'lobby') this.updateLobby(dt);
         else if (this.entry !== 'dodge') this.flyUpdate(dt);
+        this.updateBodyFocus(dt);
         if (this.mode === 'ride' && this.ride.playing) this.announcePlanets();
         this.camera.updateWorldMatrix(true, false);
         this.gazeUpdate(dt);
@@ -2570,6 +2631,28 @@ class VRApp {
         // The lobby skips bloom so stars stay pin-sharp and panels stay legible.
         else if (this.composer && this.mode !== 'lobby') this.composer.render();
         else this.renderer.render(this.scene, this.camera);
+    }
+
+    updateBodyFocus(dt) {
+        if (this.mode !== 'explore') {
+            if (this.planetFocus?.group.visible) this.hideBodyFocus();
+            return;
+        }
+        this.planetFocus.update(dt, this.camera);
+        const panel = this.vrInfoPanel;
+        if (panel?.visible && panel.parent === this.dolly && panel.userData.appear < 1) {
+            panel.userData.appear = Math.min(1, panel.userData.appear + dt / 0.35);
+            const e = 1 - Math.pow(1 - panel.userData.appear, 3);
+            panel.scale.setScalar(0.82 + 0.18 * e);
+            panel.material.opacity = e;
+        }
+        // Flat screen: a short zoom-in punch on the chosen world.
+        if (this._zoomPulse > 0 && !this.renderer.xr.isPresenting) {
+            this._zoomPulse = Math.max(0, this._zoomPulse - dt / 1.1);
+            const k = Math.sin(this._zoomPulse * Math.PI);
+            this.camera.fov = this.baseFov - 9 * k;
+            this.camera.updateProjectionMatrix();
+        }
     }
 
     updateLobby(dt) {

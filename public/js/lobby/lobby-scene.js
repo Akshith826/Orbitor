@@ -8,10 +8,13 @@
  * drops the headset session.
  */
 import * as THREE from 'three';
+import { RealSky, initialLocation, askLocation } from './real-sky.js?v=20261127-o1';
 
 export const EXPERIENCES = [
     { row: 0, slug: 'vr-ride', url: '/vr-ride', icon: '🎢', tag: 'RIDE · 3 MIN', title: 'VR Deep Space Ride', accent: '#ff8ba7',
         text: 'Rail-guided plunge from the pilot seat: solar slingshot, asteroid gauntlet, Jupiter roll, Saturn’s rings.' },
+    { row: 0, slug: 'mixed-reality', url: '/mr', icon: '🪐', tag: 'MIXED REALITY', title: 'Solar System In Your Room', accent: '#c4b5fd',
+        text: 'Your walls stay visible while the planets orbit at table height. Walk around Saturn, grab and resize it all.' },
     { row: 0, slug: 'vr-solar-system', url: '/vr-solar-system', icon: '🌌', tag: 'FREE FLIGHT', title: 'VR Solar System', accent: '#7aa2ff',
         text: 'Fly among twelve textured worlds and their moons, or take the 90-second Scan Hunt.' },
     { row: 1, slug: 'orbital-intercept', icon: '🛡️', title: 'Orbital Intercept', accent: '#64ffda',
@@ -169,70 +172,6 @@ function panelTexture(exp, w, h, renderer) {
     return canvasTexture(c, renderer);
 }
 
-/**
- * Realistic starfield: tiny round points of varied brightness and colour
- * temperature, with a crisp core and a short soft falloff. Sizes are in
- * screen pixels so stars stay pin-sharp at any distance, as real stars do.
- */
-function buildStars(count) {
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-    const size = new Float32Array(count);
-    const tint = [
-        [0.70, 0.80, 1.00], [0.85, 0.90, 1.00], [1.00, 1.00, 1.00], [1.00, 1.00, 1.00],
-        [1.00, 0.96, 0.88], [1.00, 0.90, 0.75], [1.00, 0.80, 0.62]
-    ];
-    const v = new THREE.Vector3();
-    for (let i = 0; i < count; i++) {
-        // Thicker band along a tilted "galactic plane" for a natural spread.
-        v.randomDirection();
-        if (Math.random() < 0.35) { v.y *= 0.18; v.normalize(); }
-        v.applyAxisAngle(new THREE.Vector3(1, 0, 0.3).normalize(), 0.5).multiplyScalar(500);
-        pos.set([v.x, v.y, v.z], i * 3);
-        // Magnitude distribution: most stars faint, a few bright.
-        const m = Math.pow(Math.random(), 3.2);
-        const c = tint[(Math.random() * tint.length) | 0];
-        const b = 0.45 + m * 0.85;
-        col.set([c[0] * b, c[1] * b, c[2] * b], i * 3);
-        size[i] = 1.15 + m * 2.4;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(size, 1));
-    const mat = new THREE.ShaderMaterial({
-        uniforms: { uScale: { value: 1 }, uTime: { value: 0 } },
-        vertexColors: true,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-        vertexShader: `
-            attribute float size;
-            uniform float uScale;
-            uniform float uTime;
-            varying vec3 vColor;
-            void main() {
-                // Very slight scintillation on the brighter stars only.
-                float tw = 1.0 + 0.12 * step(2.0, size) * sin(uTime * 1.7 + position.x * 0.37 + position.z * 0.21);
-                vColor = color * tw;
-                vec4 mv = modelViewMatrix * vec4(position, 1.0);
-                gl_PointSize = size * uScale;
-                gl_Position = projectionMatrix * mv;
-            }`,
-        fragmentShader: `
-            varying vec3 vColor;
-            void main() {
-                float d = length(gl_PointCoord - 0.5) * 2.0;
-                if (d > 1.0) discard;
-                float a = smoothstep(1.0, 0.0, d);
-                a *= a;
-                gl_FragColor = vec4(vColor, a);
-            }`
-    });
-    const points = new THREE.Points(geo, mat);
-    points.frustumCulled = false;
-    return points;
-}
 
 function textTexture(lines, W, H, renderer) {
     const c = document.createElement('canvas');
@@ -285,15 +224,13 @@ export class LobbyScene {
             return material ? null : t;
         };
 
-        // Faint Milky Way backdrop; the point stars on top carry the detail.
-        const sky = new THREE.Mesh(
-            new THREE.SphereGeometry(900, 48, 32),
-            new THREE.MeshBasicMaterial({ map: tex('/public/textures/lobby/star-map-2k.jpg'), side: THREE.BackSide, color: 0x3a4258, toneMapped: false, depthWrite: false })
-        );
-        sky.rotation.z = 0.5;
-        this.sky = sky;
-        this.stars = buildStars(6500);
-        g.add(sky, this.stars);
+        // Tonight's real sky above the viewer: catalogue stars, Milky Way,
+        // constellations, the Moon in its true phase and the bright planets.
+        this.realSky = new RealSky(g, this.renderer);
+        this.realSky.onInfo = info => this.drawSkyCard(info);
+        this.skyLoad = initialLocation()
+            .then(loc => { this.realSky.location = loc; return this.realSky.load(); })
+            .catch(err => console.warn('[lobby] real sky unavailable:', err.message));
 
         this.lights = new THREE.Group();
         this.lights.add(new THREE.AmbientLight(0x6070a0, 0.25));
@@ -302,14 +239,6 @@ export class LobbyScene {
         this.lights.add(sun);
         g.add(this.lights);
 
-        // The Sun: a small, hard-edged disc with a tight halo — not a fog ball.
-        const sunDisc = new THREE.Mesh(
-            new THREE.CircleGeometry(4, 48),
-            new THREE.MeshBasicMaterial({ color: 0xfff6e6, toneMapped: false })
-        );
-        sunDisc.position.set(-300, 150, 200);
-        sunDisc.lookAt(0, 0, 0);
-        g.add(sunDisc);
 
         // Earth fills the lower view, as if the lobby orbits above it.
         this.earth = new THREE.Group();
@@ -378,7 +307,7 @@ export class LobbyScene {
         this.setStatus('Point and pull the trigger · or click a panel');
 
         const rows = [
-            { y: 0.3, w: 1.08, h: 0.56, step: 25 },
+            { y: 0.3, w: 0.96, h: 0.56, step: 23 },
             { y: -0.38, w: 0.66, h: 0.46, step: 15.5 }
         ];
         for (const [ri, row] of rows.entries()) {
@@ -412,6 +341,126 @@ export class LobbyScene {
             });
         }
         this.hitTargets = this.panels.map(p => p.mesh);
+        this.buildSkyCard();
+    }
+
+    /** "Your sky right now" card to the right of the launch panels, with a location button. */
+    buildSkyCard() {
+        const W = 1024, H = 900;
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        this.skyCanvas = c;
+        this.skyTex = canvasTexture(c, this.renderer);
+        const angle = 64 * DEG;
+        const w = 0.86, h = w * H / W;
+        const group = new THREE.Group();
+        group.position.set(Math.sin(angle) * RADIUS, 0.02, -Math.cos(angle) * RADIUS);
+        group.lookAt(0, 0.02, 0);
+        const card = new THREE.Mesh(bentPlane(w, h, RADIUS), new THREE.MeshBasicMaterial({ map: this.skyTex, transparent: true, toneMapped: false }));
+        const shadow = new THREE.Mesh(bentPlane(w * 1.2, h * 1.24, RADIUS),
+            new THREE.MeshBasicMaterial({ map: softRoundedTexture(w / h), color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
+        shadow.position.set(0.01, -0.035, -0.06);
+        group.add(shadow, card);
+
+        // Location button under the card (a normal lobby target).
+        const bc = document.createElement('canvas');
+        bc.width = 800; bc.height = 150;
+        this.locCanvas = bc;
+        this.locTex = canvasTexture(bc, this.renderer);
+        const exp = { slug: 'sky-locate', action: 'locate', title: 'Use my location', accent: '#64ffda' };
+        const btn = new THREE.Mesh(bentPlane(0.56, 0.105, RADIUS), new THREE.MeshBasicMaterial({ map: this.locTex, transparent: true, toneMapped: false }));
+        btn.position.set(0, -h / 2 - 0.1, 0.01);
+        btn.userData.exp = exp;
+        const glow = new THREE.Mesh(bentPlane(0.7, 0.2, RADIUS),
+            new THREE.MeshBasicMaterial({ map: softRoundedTexture(0.56 / 0.105), color: 0x64ffda, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+        glow.position.copy(btn.position).setZ(-0.02);
+        group.add(glow, btn);
+        this.group.add(group);
+        this.panels.push({ exp, group, mesh: btn, glow, baseY: 0.02, phase: 0, hover: 0, flash: 0, static: true });
+        this.hitTargets.push(btn);
+        this.drawLocationButton('📍 Use my location');
+        this.drawSkyCard(null);
+    }
+
+    drawLocationButton(text) {
+        if (!this.locCanvas) return;
+        const x = this.locCanvas.getContext('2d');
+        x.clearRect(0, 0, 800, 150);
+        roundRect(x, 4, 4, 792, 142, 70);
+        x.fillStyle = 'rgba(10,22,40,0.95)'; x.fill();
+        x.lineWidth = 4; x.strokeStyle = '#64ffda'; x.stroke();
+        x.fillStyle = '#e6fffa';
+        x.font = '700 54px Inter, sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(text, 400, 78, 740);
+        this.locTex.needsUpdate = true;
+    }
+
+    drawSkyCard(info) {
+        if (!this.skyCanvas) return;
+        const W = this.skyCanvas.width, H = this.skyCanvas.height;
+        const x = this.skyCanvas.getContext('2d');
+        x.clearRect(0, 0, W, H);
+        roundRect(x, 4, 4, W - 8, H - 8, 110);
+        const bg = x.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, 'rgba(14,24,46,0.95)'); bg.addColorStop(1, 'rgba(6,11,24,0.95)');
+        x.fillStyle = bg; x.fill();
+        x.lineWidth = 3; x.strokeStyle = 'rgba(100,255,218,0.5)'; x.stroke();
+        const pad = 60;
+        x.textBaseline = 'top';
+        x.fillStyle = '#64ffda'; x.font = '700 34px Inter, sans-serif';
+        x.fillText('YOUR SKY · RIGHT NOW', pad, 56);
+        if (!info) {
+            x.fillStyle = '#a8b6d6'; x.font = '500 40px Inter, sans-serif';
+            x.fillText('Plotting tonight’s stars…', pad, 140);
+            this.skyTex.needsUpdate = true;
+            return;
+        }
+        const d = info.date;
+        x.fillStyle = '#eef4ff'; x.font = '800 66px Orbitron, Inter, sans-serif';
+        x.fillText(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), pad, 108);
+        x.fillStyle = '#a8b6d6'; x.font = '500 36px Inter, sans-serif';
+        x.fillText(d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }), pad, 190);
+        const lat = `${Math.abs(info.lat).toFixed(1)}°${info.lat >= 0 ? 'N' : 'S'}`;
+        const lon = `${Math.abs(info.lon).toFixed(1)}°${info.lon >= 0 ? 'E' : 'W'}`;
+        x.fillText(info.source === 'approximate' ? `≈ ${lat} ${lon} · guessed from your time zone` : `📍 ${lat} ${lon}`, pad, 240, W - pad * 2);
+
+        const rows = [];
+        const m = info.moon;
+        const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const dir = az => dirs[Math.round(((az % 360) + 360) % 360 / 45) % 8];
+        rows.push(['🌙', `Moon ${Math.round(m.illumination * 100)}% ${m.waxing ? 'waxing' : 'waning'} · in ${m.constellation}`]);
+        rows.push(['', m.up ? `${Math.round(m.alt)}° up in the ${dir(m.az)}` : 'below your horizon right now']);
+        rows.push(['🪐', info.planetsUp.length ? info.planetsUp.slice(0, 3).join(' · ') : 'No bright planets up right now']);
+        rows.push(['✨', `${info.starsUp.toLocaleString()} naked-eye stars above you`]);
+        if (info.sunAlt > -6) rows.push(['☀️', info.sunAlt > 0 ? 'Sun is up: stars shown faint, as by day' : 'Twilight: the first stars are out']);
+        let y = 330;
+        for (const [icon, text] of rows) {
+            x.font = '400 44px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+            x.fillText(icon, pad, y);
+            x.fillStyle = '#dbe6f7'; x.font = '500 38px Inter, sans-serif';
+            x.fillText(text, pad + 70, y + 4, W - pad * 2 - 70);
+            x.fillStyle = '#a8b6d6';
+            y += 92;
+        }
+        x.fillStyle = '#6f84a8'; x.font = '500 28px Inter, sans-serif';
+        x.fillText('Lobby faces north · N E S W on the horizon', pad, H - 80);
+        this.skyTex.needsUpdate = true;
+    }
+
+    /** Ask for the real location and re-plot the sky (the browser may show a permission prompt). */
+    locate() {
+        this.drawLocationButton('📍 Locating…');
+        return askLocation().then(loc => {
+            this.realSky.setLocation(loc.lat, loc.lon, loc.source);
+            this.drawLocationButton('📍 Sky set to your location');
+            this.setStatus('Sky set to your location', true);
+            return loc;
+        }).catch(err => {
+            this.drawLocationButton('📍 Use my location');
+            this.setStatus('Location unavailable: ' + (err?.message || 'permission denied'), true);
+            throw err;
+        });
     }
 
     /** @param {boolean} [important] also show it on a flat screen (the page has its own hint there) */
@@ -449,10 +498,7 @@ export class LobbyScene {
         if (!this.group.visible || !this.earthBody) return;
         this.earthBody.rotation.y += dt * 0.012;
         this.clouds.rotation.y += dt * 0.016;
-        this.sky.rotation.y += dt * 0.0015;
-        this.stars.rotation.y += dt * 0.0015;
-        this.stars.material.uniforms.uTime.value = t;
-        this.stars.material.uniforms.uScale.value = this.renderer.getPixelRatio() * (this.renderer.xr.isPresenting ? 1.6 : 1);
+        this.realSky.update(dt, t);
         if (this.title) this.title.position.y = 0.98 + Math.sin(t * 0.8) * 0.015;
         if (this.statusMesh) this.statusMesh.visible = this.renderer.xr.isPresenting || this.statusImportant;
         let newlyHovered = false;

@@ -51,11 +51,11 @@ function stays2D() {
     try { return storage()?.getItem(STAY_2D_KEY) === '1'; } catch { return false; }
 }
 
-function buildPrompt(text, sub, fromVR) {
+function buildPrompt(text, sub, fromVR, button = 'Enter VR') {
     const layer = document.createElement('div');
     layer.id = 'auto-vr';
     layer.setAttribute('role', 'dialog');
-    layer.setAttribute('aria-label', 'Enter VR');
+    layer.setAttribute('aria-label', button);
     layer.innerHTML = `
         <div class="auto-vr-card">
             <div class="auto-vr-icon" aria-hidden="true">🥽</div>
@@ -65,6 +65,7 @@ function buildPrompt(text, sub, fromVR) {
             <button type="button" class="auto-vr-skip">Stay in 2D</button>
         </div>`;
     layer.querySelector('h2').textContent = fromVR ? 'Continue in VR' : text;
+    layer.querySelector('.auto-vr-go').textContent = button;
     layer.querySelector('.auto-vr-sub').textContent = sub;
     const style = document.createElement('style');
     style.textContent = `
@@ -99,11 +100,12 @@ function buildPrompt(text, sub, fromVR) {
  * @param {string} [opts.sub]    Prompt detail line.
  * @returns {Promise<{supported: boolean}>}
  */
-export async function setupAutoVR({ enter, isActive, title = 'Enter VR', sub = 'Pull the trigger anywhere to put this experience in your headset.' }) {
+export async function setupAutoVR({ enter, isActive, title = 'Enter VR', sub = 'Pull the trigger anywhere to put this experience in your headset.',
+    mode = 'immersive-vr', sessionInit = XR_SESSION_INIT, button = 'Enter VR' }) {
     const xr = navigator.xr;
     if (!xr || !window.isSecureContext) return { supported: false };
     let supported = false;
-    try { supported = await xr.isSessionSupported('immersive-vr'); } catch { supported = false; }
+    try { supported = await xr.isSessionSupported(mode); } catch { supported = false; }
     if (!supported) return { supported: false };
 
     const fromVR = cameFromVR();
@@ -116,17 +118,17 @@ export async function setupAutoVR({ enter, isActive, title = 'Enter VR', sub = '
     };
 
     // 1. WebXR navigation: the previous page was immersive.
-    xr.addEventListener?.('sessiongranted', () => { if (!isActive()) start(null); });
+    if (mode === 'immersive-vr') xr.addEventListener?.('sessiongranted', () => { if (!isActive()) start(null); });
 
     if (stays2D() && !fromVR) return { supported: true };
 
     // 2. Let the browser offer VR itself.
     if (typeof xr.offerSession === 'function') {
-        xr.offerSession('immersive-vr', XR_SESSION_INIT).then(start, () => {});
+        xr.offerSession(mode, sessionInit).then(start, () => {});
     }
 
     // 3. One trigger pull / tap anywhere.
-    prompt = buildPrompt(title, sub, fromVR);
+    prompt = buildPrompt(title, sub, fromVR, button);
     prompt.addEventListener('click', ev => {
         if (ev.target.closest('.auto-vr-skip')) {
             try { storage()?.setItem(STAY_2D_KEY, '1'); } catch { /* private mode */ }

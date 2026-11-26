@@ -12,6 +12,7 @@
  * camera pose and only the rig may be moved.
  */
 import * as THREE from 'three';
+import { BlackHole } from './black-hole.js?v=20261127-o1';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const easeInOut = p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
@@ -45,6 +46,14 @@ export function buildSegments(sys) {
 
     const at = (base, o, s, y, os, ss) => base.clone().addScaledVector(o, os).addScaledVector(s, ss).add(V(0, y, 0));
 
+    // The finale's black hole sits in deep space beyond Neptune. The track
+    // spirals past it (never inside the lensing region) and then escapes.
+    const bh = nep.clone().addScaledVector(nO, 300).addScaledVector(nS, -60).add(V(0, 30, 0));
+    const bT = bh.clone().sub(nep).setY(0).normalize();          // heading in
+    const bS = V(-bT.z, 0, bT.x);                                 // to the side
+    const K = 2.3;   // spiral scale, matched to the black hole's size
+    const around = (t, s, y) => bh.clone().addScaledVector(bT, t * K).addScaledVector(bS, s * K).add(V(0, y * K, 0));
+
     // The slingshot has to be described as a real arc: a Catmull-Rom spline
     // through two or three widely spaced points bows inwards badly enough to
     // put the ship inside the photosphere.
@@ -56,7 +65,7 @@ export function buildSegments(sys) {
         sling.push(V(Math.cos(a) * SLING_R, -8 + Math.sin(k * Math.PI) * 20, Math.sin(a) * SLING_R));
     }
 
-    return [
+    const segments = [
         {
             id: 'ignition', title: 'IGNITION', subtitle: 'Departing Earth orbit',
             dur: 12, shape: 'easeIn', bank: 0.4, focus: 'earth', fov: 62,
@@ -187,10 +196,32 @@ export function buildSegments(sys) {
             ]
         },
         {
+            id: 'singularity', title: 'SINGULARITY', subtitle: 'Skimming a supermassive black hole',
+            dur: 26, shape: 'linear', bank: 0.9, focusPoint: bh, fov: 82, dilate: true,
+            pts: [
+                around(-80, 8, 8),
+                around(-38, 30, 4),
+                around(-4, 26, 2),
+                around(22, 14, -1),
+                around(30, -16, 3),
+                around(6, -58, 12)
+            ],
+            events: [
+                { at: 0.03, kind: 'narrate', text: 'Gravitational anomaly dead ahead. That is a supermassive black hole.' },
+                { at: 0.22, kind: 'heartbeat' },
+                { at: 0.30, kind: 'narrate', text: 'Look at the stars behind it. Light itself is bending around the hole.' },
+                { at: 0.42, kind: 'heartbeat' },
+                { at: 0.50, kind: 'shake', amp: 0.35 },
+                { at: 0.55, kind: 'narrate', text: 'Time dilation. Every second here is hours back on Earth.' },
+                { at: 0.62, kind: 'heartbeat' },
+                { at: 0.82, kind: 'narrate', text: 'Full burn. Breaking orbit before the event horizon.' }
+            ]
+        },
+        {
             id: 'return', title: 'RETURN BURN', subtitle: 'Warp home',
             dur: 18, shape: 'easeOut', bank: 0.5, focus: 'ahead', fov: 88,
             pts: [
-                V(nep.x * 0.7, 20, nep.z * 0.7),
+                V(nep.x * 0.85, 26, nep.z * 0.85),
                 V(earth.x * 2.1, 30, earth.z * 2.1),
                 at(earth, eO, eS, 6, 34, 26),
                 at(earth, eO, eS, 2, 15, 8)
@@ -202,6 +233,8 @@ export function buildSegments(sys) {
             ]
         }
     ];
+    segments.blackHole = bh;
+    return segments;
 }
 
 export class Ride {
@@ -232,12 +265,15 @@ export class Ride {
         this._bank = 0;
         this._speedNorm = 0;
         this._buildStreaks();
+        this.blackHole = new BlackHole(scene);
+        this.dilation = 0;
     }
 
     /** (re)build the track from live planet positions */
     prepare() {
         this.system.poseForRide();
         this.segments = buildSegments(this.system);
+        if (this.segments.blackHole) this.blackHole.place(this.segments.blackHole);
 
         const pts = [];
         this.segments.forEach(s => {
@@ -277,6 +313,12 @@ export class Ride {
 
     get duration() { return this.total; }
 
+    /** 0..1: how deep in the black hole's time well the ride is (sound + haptics follow it). */
+    setDilation(amount) {
+        this.dilation = amount;
+        if (this.audio?.timeDilation) this.audio.timeDilation(amount);
+    }
+
     start() {
         if (!this.curve) this.prepare();
         this.time = 0;
@@ -287,6 +329,7 @@ export class Ride {
         this._prevPos = null;
         this.segments.forEach(s => s.fired.clear());
         this.system.orbitRate = 0.06;         // near-freeze so the track stays true
+        this.blackHole.setVisible(Boolean(this.segments.blackHole));
         this.scares.clear();
         this.update(0.0001);
     }
@@ -294,6 +337,9 @@ export class Ride {
     stop() {
         this.playing = false;
         this.system.orbitRate = 1;
+        this.blackHole.setVisible(false);
+        this.speedScale = 1;
+        this.setDilation(0);
         this.scares.clear();
         this.streaks.material.opacity = 0;
         if (this.audio) this.audio.setEngine(0);
@@ -438,9 +484,21 @@ export class Ride {
         if (this._prevPos && dt > 0.0005) speed = this._prevPos.distanceTo(pos) / dt;
         this._prevPos = pos.clone();
 
+        // Time dilation: the clock runs slow on the closest pass of the black hole,
+        // so that stretch of the ride lasts longer in real time.
+        if (s.dilate) {
+            const d = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, r.local))), 1.6);
+            this.speedScale = 1 - 0.55 * d;
+            this.setDilation(d);
+        } else if (this.speedScale !== 1 || this.dilation) {
+            this.speedScale = 1;
+            this.setDilation(0);
+        }
+        this.blackHole.update(dt, this.camera);
+
         let lookTarget;
-        if (s.focus && s.focus !== 'ahead' && this.system.bodies.has(s.focus)) {
-            const bp = this.system.worldPos(s.focus, new THREE.Vector3());
+        if (s.focusPoint || (s.focus && s.focus !== 'ahead' && this.system.bodies.has(s.focus))) {
+            const bp = s.focusPoint ? s.focusPoint.clone() : this.system.worldPos(s.focus, new THREE.Vector3());
             // blend planet-gazing with the direction of travel so it never
             // feels like the ship is flying sideways
             const w = 0.45 + 0.3 * Math.sin(r.local * Math.PI);
@@ -525,6 +583,10 @@ export class Ride {
                 break;
             case 'warp':
                 if (this.audio) this.audio.warp(2.6);
+                break;
+            case 'heartbeat':
+                if (this.audio?.heartbeat) this.audio.heartbeat();
+                this.onHeartbeat?.();
                 break;
         }
     }

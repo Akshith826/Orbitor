@@ -25,7 +25,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
         page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
         await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
-        await page.waitForFunction(() => window.__vr && window.__vr.mode === 'lobby' && window.__vr.lobby.hitTargets.length === 9);
+        await page.waitForFunction(() => window.__vr && window.__vr.mode === 'lobby' && window.__vr.lobby.hitTargets.length === 11);
         await page.evaluate(() => { window.__sameDocument = 'yes'; });
         const state = () => page.evaluate(() => ({
             path: location.pathname, same: window.__sameDocument, entry: window.__vr.entry, mode: window.__vr.mode,
